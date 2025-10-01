@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 - 조직별 물량 설정</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>광고성 알림 물량 관리</h1>
+            <ul class="nav-menu">
+                <li><a href="/admin" class="active">관리자</a></li>
+                <li><a href="/request">캠페인신청</a></li>
+                <li><a href="/calendar">현황보기</a></li>
+                <li><a href="/admin/logout">로그아웃</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>관리자 페이지</h2>
+
+        <!-- 탭 메뉴 -->
+        <div class="admin-tabs">
+            <button class="tab-btn active" data-tab="quota">물량 설정</button>
+            <button class="tab-btn" data-tab="manage">조직/서비스 관리</button>
+        </div>
+
+        <!-- 물량 설정 탭 -->
+        <div id="quotaTab" class="tab-content active">
+            <h3>조직별 월간 물량 설정</h3>
+
+        <div class="form-card">
+            <form id="quotaForm">
+                <div class="form-group">
+                    <label for="organization">조직</label>
+                    <select id="organization" required>
+                        <option value="">조직 선택</option>
+                        {% for org in organizations %}
+                        <option value="{{ org.id }}">{{ org.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="channel">발송 채널</label>
+                    <select id="channel" required>
+                        <option value="naver">네이버앱</option>
+                        <option value="payco">페이앱</option>
+                        <option value="talktalk">톡톡</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="yearMonth">연월</label>
+                    <input type="month" id="yearMonth" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="totalQuota">총 물량</label>
+                    <input type="text" id="totalQuotaDisplay" placeholder="예: 10만" required>
+                    <input type="hidden" id="totalQuota">
+                    <div class="quantity-display">
+                        <span id="quotaRealValue">0건</span>
+                    </div>
+                    <small class="help-text">예시: 1천(1,000) / 5만(50,000) / 100만(1,000,000)</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary">물량 설정</button>
+            </form>
+        </div>
+
+            <div class="quota-list">
+                <h3>전체 등록된 물량 목록</h3>
+
+                <div class="filter-section">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                        <div class="form-group" style="flex: 1;">
+                            <label for="filterYearMonth">연월 필터</label>
+                            <input type="month" id="filterYearMonth">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="filterChannel">채널 필터</label>
+                            <select id="filterChannel">
+                                <option value="">전체</option>
+                                <option value="naver">네이버앱</option>
+                                <option value="payco">페이앱</option>
+                                <option value="talktalk">톡톡</option>
+                            </select>
+                        </div>
+                        <button type="button" id="searchQuotaBtn" class="btn btn-primary">조회하기</button>
+                    </div>
+                </div>
+
+                <hr style="margin: 2rem 0; border: none; border-top: 2px solid #dee2e6;">
+
+                <div class="copy-section">
+                    <h4>📋 물량 복사하기</h4>
+                    <p class="help-text">특정 월의 모든 조직 물량을 다른 월로 복사할 수 있습니다.</p>
+                    <div class="copy-form">
+                        <div class="form-group">
+                            <label for="copySourceMonth">복사할 원본 월</label>
+                            <input type="month" id="copySourceMonth" required>
+                        </div>
+                        <div class="copy-arrow">→</div>
+                        <div class="form-group">
+                            <label for="copyTargetMonth">복사될 대상 월</label>
+                            <input type="month" id="copyTargetMonth" required>
+                        </div>
+                        <button type="button" id="copyQuotaBtn" class="btn btn-primary">복사하기</button>
+                    </div>
+                </div>
+
+                <hr style="margin: 2rem 0; border: none; border-top: 2px solid #dee2e6;">
+
+                <div id="allQuotaListContainer">
+                    <p class="text-muted">로딩 중...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 조직/서비스 관리 탭 -->
+        <div id="manageTab" class="tab-content">
+            <h3>조직 관리</h3>
+            <div class="form-card">
+                <form id="orgForm">
+                    <div class="form-group">
+                        <label for="orgName">조직명</label>
+                        <input type="text" id="orgName" placeholder="예: 대출" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">조직 추가</button>
+                </form>
+            </div>
+
+            <h3 style="margin-top: 2rem;">서비스 관리</h3>
+            <div class="form-card">
+                <form id="serviceForm">
+                    <div class="form-group">
+                        <label for="serviceOrg">조직</label>
+                        <select id="serviceOrg" required>
+                            <option value="">조직 선택</option>
+                            {% for org in organizations %}
+                            <option value="{{ org.id }}">{{ org.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="serviceName">서비스명</label>
+                        <input type="text" id="serviceName" placeholder="예: 신용대출" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="managerName">담당자명</label>
+                        <input type="text" id="managerName" placeholder="예: 홍길동">
+                    </div>
+                    <button type="submit" class="btn btn-primary">서비스 추가</button>
+                </form>
+            </div>
+
+            <h3 style="margin-top: 2rem;">등록된 조직 목록</h3>
+            <div class="form-card">
+                <div id="orgListContainer">
+                    <p class="text-muted">로딩 중...</p>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 2rem;">등록된 서비스 목록</h3>
+            <div class="form-card">
+                <div id="serviceListContainer">
+                    <p class="text-muted">로딩 중...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('quotaForm');
+        const orgSelect = document.getElementById('organization');
+        const channelSelect = document.getElementById('channel');
+        const yearMonthInput = document.getElementById('yearMonth');
+        const quotaDisplayInput = document.getElementById('totalQuotaDisplay');
+        const quotaHiddenInput = document.getElementById('totalQuota');
+        const quotaRealValue = document.getElementById('quotaRealValue');
+
+        // 현재 날짜 기준 다음 달로 기본값 설정
+        const today = new Date();
+        const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        yearMonthInput.value = nextMonth.toISOString().slice(0, 7);
+
+        // 물량 입력 변환 함수
+        function parseKoreanNumber(input) {
+            if (!input) return 0;
+
+            // 쉼표 제거
+            input = input.replace(/,/g, '');
+
+            // 숫자만 있는 경우
+            if (/^\d+$/.test(input)) {
+                return parseInt(input);
+            }
+
+            // 한글 단위 처리
+            let result = 0;
+
+            // 만 단위 처리
+            const manMatch = input.match(/(\d+(?:\.\d+)?)\s*만/);
+            if (manMatch) {
+                result += parseFloat(manMatch[1]) * 10000;
+            }
+
+            // 천 단위 처리
+            const cheonMatch = input.match(/(\d+(?:\.\d+)?)\s*천/);
+            if (cheonMatch) {
+                result += parseFloat(cheonMatch[1]) * 1000;
+            }
+
+            // 백 단위 처리
+            const baekMatch = input.match(/(\d+(?:\.\d+)?)\s*백/);
+            if (baekMatch) {
+                result += parseFloat(baekMatch[1]) * 100;
+            }
+
+            return Math.floor(result);
+        }
+
+        // 실시간 변환 표시
+        quotaDisplayInput.addEventListener('input', () => {
+            const value = parseKoreanNumber(quotaDisplayInput.value);
+            quotaHiddenInput.value = value;
+            quotaRealValue.textContent = value.toLocaleString() + '건';
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const quota = parseInt(quotaHiddenInput.value);
+
+            if (quota < 100 || quota > 10000000) {
+                alert('물량은 100건 이상 1,000만건 이하로 입력해주세요.');
+                return;
+            }
+
+            const data = {
+                organization_id: parseInt(orgSelect.value),
+                channel: channelSelect.value,
+                year_month: yearMonthInput.value,
+                total_quota: quota
+            };
+
+            try {
+                const response = await fetch('/api/quota', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    quotaDisplayInput.value = '';
+                    quotaHiddenInput.value = '';
+                    quotaRealValue.textContent = '0건';
+                    loadQuota(); // 목록 새로고침
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('물량 설정 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 조직 또는 연월 변경 시 설정된 물량 조회
+        async function loadQuota() {
+            if (!orgSelect.value || !yearMonthInput.value) return;
+
+            try {
+                const response = await fetch(`/api/quota/${orgSelect.value}/${yearMonthInput.value}`);
+                const data = await response.json();
+
+                const container = document.getElementById('quotaListContainer');
+                if (data.total_quota > 0) {
+                    container.innerHTML = `
+                        <div class="quota-item">
+                            <strong>${orgSelect.options[orgSelect.selectedIndex].text}</strong>
+                            <span>${yearMonthInput.value}</span>
+                            <span class="quota-value">${data.total_quota.toLocaleString()}건</span>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<p class="text-muted">설정된 물량이 없습니다.</p>';
+                }
+            } catch (error) {
+                console.error('물량 조회 중 오류:', error);
+            }
+        }
+
+        orgSelect.addEventListener('change', loadQuota);
+        yearMonthInput.addEventListener('change', loadQuota);
+
+        // 전체 물량 목록 로드
+        const filterYearMonthInput = document.getElementById('filterYearMonth');
+        const filterChannelSelect = document.getElementById('filterChannel');
+        const searchQuotaBtn = document.getElementById('searchQuotaBtn');
+        const allQuotaListContainer = document.getElementById('allQuotaListContainer');
+
+        // 기본값 설정 (다음 달)
+        filterYearMonthInput.value = nextMonth.toISOString().slice(0, 7);
+
+        // 초기 로드 메시지
+        allQuotaListContainer.innerHTML = '<p class="text-muted">조회하기 버튼을 눌러주세요.</p>';
+
+        // 채널명 매핑
+        const channelNames = {
+            'naver': '네이버앱',
+            'payco': '페이앱',
+            'talktalk': '톡톡'
+        };
+
+        async function loadAllQuotas() {
+            const yearMonth = filterYearMonthInput.value;
+            const channel = filterChannelSelect.value;
+
+            try {
+                let url = '/api/quotas?';
+                if (yearMonth) url += `year_month=${yearMonth}&`;
+                if (channel) url += `channel=${channel}&`;
+
+                const response = await fetch(url);
+                const quotas = await response.json();
+
+                if (quotas.length === 0) {
+                    allQuotaListContainer.innerHTML = '<p class="text-muted">등록된 물량이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>조직</th><th>채널</th><th>연월</th><th>총 물량</th><th>등록일시</th><th>작업</th>';
+                html += '</tr></thead><tbody>';
+
+                quotas.forEach(quota => {
+                    html += '<tr>';
+                    html += `<td><strong>${quota.organization_name}</strong></td>`;
+                    html += `<td><span class="channel-badge channel-${quota.channel}">${channelNames[quota.channel]}</span></td>`;
+                    html += `<td>${quota.year_month}</td>`;
+                    html += `<td class="quota-value">${quota.total_quota.toLocaleString()}건</td>`;
+                    html += `<td>${quota.created_at}</td>`;
+                    html += `<td class="action-buttons">`;
+                    html += `<button class="btn-edit" onclick="editQuota(${quota.id}, '${quota.organization_name}', '${quota.channel}', '${quota.year_month}', ${quota.total_quota})">수정</button>`;
+                    html += `<button class="btn-delete" onclick="deleteQuota(${quota.id}, '${quota.organization_name}', '${quota.channel}', '${quota.year_month}')">삭제</button>`;
+                    html += `</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                allQuotaListContainer.innerHTML = html;
+            } catch (error) {
+                console.error('물량 목록 로드 실패:', error);
+                allQuotaListContainer.innerHTML = '<p class="text-muted">물량 목록을 불러오는데 실패했습니다.</p>';
+            }
+        }
+
+        // 조회하기 버튼 클릭 시에만 로드
+        searchQuotaBtn.addEventListener('click', loadAllQuotas);
+
+        // 물량 복사 기능
+        const copySourceMonthInput = document.getElementById('copySourceMonth');
+        const copyTargetMonthInput = document.getElementById('copyTargetMonth');
+        const copyQuotaBtn = document.getElementById('copyQuotaBtn');
+
+        // 기본값 설정
+        const currentMonth = new Date();
+        copySourceMonthInput.value = currentMonth.toISOString().slice(0, 7);
+        copyTargetMonthInput.value = nextMonth.toISOString().slice(0, 7);
+
+        copyQuotaBtn.addEventListener('click', async () => {
+            const sourceMonth = copySourceMonthInput.value;
+            const targetMonth = copyTargetMonthInput.value;
+
+            if (!sourceMonth || !targetMonth) {
+                alert('원본 월과 대상 월을 모두 선택해주세요.');
+                return;
+            }
+
+            if (sourceMonth === targetMonth) {
+                alert('원본 월과 대상 월이 같을 수 없습니다.');
+                return;
+            }
+
+            // 원본 월 물량 미리보기
+            try {
+                const previewResponse = await fetch(`/api/quotas?year_month=${sourceMonth}`);
+                const sourceQuotas = await previewResponse.json();
+
+                if (sourceQuotas.length === 0) {
+                    alert('원본 월에 설정된 물량이 없습니다.');
+                    return;
+                }
+
+                let previewText = `${sourceMonth} → ${targetMonth}\n\n`;
+                previewText += `복사될 조직 (${sourceQuotas.length}개):\n`;
+                sourceQuotas.forEach(quota => {
+                    previewText += `- ${quota.organization_name}: ${quota.total_quota.toLocaleString()}건\n`;
+                });
+                previewText += `\n계속하시겠습니까?`;
+
+                if (!confirm(previewText)) {
+                    return;
+                }
+
+                // 복사 실행
+                const response = await fetch('/api/quotas/copy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source_year_month: sourceMonth,
+                        target_year_month: targetMonth
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    filterYearMonthInput.value = targetMonth;
+                    loadAllQuotas();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('물량 복사 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 물량 수정
+        window.editQuota = async function(quotaId, orgName, channel, yearMonth, currentQuota) {
+            const channelName = channelNames[channel];
+            const input = prompt(`${orgName} - ${channelName} (${yearMonth}) 물량 수정\n\n예: 10만, 50만, 100만 등으로 입력`, '');
+
+            if (!input) return;
+
+            const newQuota = parseKoreanNumber(input);
+
+            if (newQuota < 100 || newQuota > 10000000) {
+                alert('물량은 100건 이상 1,000만건 이하로 입력해주세요.');
+                return;
+            }
+
+            if (!confirm(`${orgName} - ${channelName} (${yearMonth}) 물량을\n${currentQuota.toLocaleString()}건 → ${newQuota.toLocaleString()}건\n으로 수정하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/quota/${quotaId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ total_quota: newQuota })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadAllQuotas();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('물량 수정 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 물량 삭제
+        window.deleteQuota = async function(quotaId, orgName, channel, yearMonth) {
+            const channelName = channelNames[channel];
+            if (!confirm(`${orgName} - ${channelName} (${yearMonth}) 물량을 삭제하시겠습니까?\n\n⚠️ 삭제 후에는 복구할 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/quota/${quotaId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadAllQuotas();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('물량 삭제 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 탭 전환
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+
+                tabBtns.forEach(b => b.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                btn.classList.add('active');
+                document.getElementById(tabName + 'Tab').classList.add('active');
+            });
+        });
+
+        // 조직 추가
+        const orgForm = document.getElementById('orgForm');
+        orgForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('orgName').value;
+
+            try {
+                const response = await fetch('/api/organization', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    document.getElementById('orgName').value = '';
+
+                    // 드롭다운에 새 조직 추가 (새로고침 없이)
+                    const newOption = document.createElement('option');
+                    newOption.value = result.id;
+                    newOption.textContent = name;
+                    orgSelect.appendChild(newOption);
+
+                    const serviceOrgSelect = document.getElementById('serviceOrg');
+                    const newOption2 = document.createElement('option');
+                    newOption2.value = result.id;
+                    newOption2.textContent = name;
+                    serviceOrgSelect.appendChild(newOption2);
+
+                    loadOrgList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('조직 추가 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 서비스 추가
+        const serviceForm = document.getElementById('serviceForm');
+        serviceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                organization_id: parseInt(document.getElementById('serviceOrg').value),
+                name: document.getElementById('serviceName').value,
+                manager_name: document.getElementById('managerName').value
+            };
+
+            try {
+                const response = await fetch('/api/service', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    serviceForm.reset();
+                    loadOrgList();
+                    loadServiceList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('서비스 추가 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 조직 목록 로드
+        async function loadOrgList() {
+            try {
+                const response = await fetch('/api/organizations');
+                const orgs = await response.json();
+
+                const container = document.getElementById('orgListContainer');
+                if (orgs.length === 0) {
+                    container.innerHTML = '<p class="text-muted">등록된 조직이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>조직명</th><th>등록일시</th>';
+                html += '</tr></thead><tbody>';
+
+                orgs.forEach(org => {
+                    html += '<tr>';
+                    html += `<td><strong>${org.name}</strong></td>`;
+                    html += `<td>${org.created_at}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('조직 목록 로드 실패:', error);
+            }
+        }
+
+        // 서비스 목록 로드
+        async function loadServiceList() {
+            try {
+                const response = await fetch('/api/services');
+                const services = await response.json();
+
+                const container = document.getElementById('serviceListContainer');
+                if (services.length === 0) {
+                    container.innerHTML = '<p class="text-muted">등록된 서비스가 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>조직</th><th>서비스명</th><th>담당자</th><th>등록일시</th>';
+                html += '</tr></thead><tbody>';
+
+                services.forEach(service => {
+                    html += '<tr>';
+                    html += `<td><strong>${service.organization_name}</strong></td>`;
+                    html += `<td>${service.name}</td>`;
+                    html += `<td>${service.manager_name || '-'}</td>`;
+                    html += `<td>${service.created_at}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('서비스 목록 로드 실패:', error);
+            }
+        }
+
+        // 탭 전환 시 목록 로드
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                if (tabName === 'manage') {
+                    loadOrgList();
+                    loadServiceList();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

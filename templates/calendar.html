@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>물량 현황</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>광고성 알림 물량 관리</h1>
+            <ul class="nav-menu">
+                <li><a href="/admin">관리자</a></li>
+                <li><a href="/request">캠페인신청</a></li>
+                <li><a href="/calendar" class="active">현황보기</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>물량 현황</h2>
+
+        <div class="calendar-controls">
+            <div class="filter-group">
+                <div class="form-group">
+                    <label for="filterType">필터</label>
+                    <select id="filterType">
+                        <option value="all">전체</option>
+                        <option value="organization">조직별</option>
+                        <option value="service">서비스별</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="orgFilterGroup" style="display: none;">
+                    <label for="organization">조직</label>
+                    <select id="organization">
+                        <option value="">전체</option>
+                        {% for org in organizations %}
+                        <option value="{{ org.id }}">{{ org.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" id="serviceFilterGroup" style="display: none;">
+                    <label for="service">서비스</label>
+                    <select id="service" disabled>
+                        <option value="">서비스 선택</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="channel">채널</label>
+                    <select id="channel">
+                        <option value="all">전체</option>
+                        <option value="naver">네이버앱</option>
+                        <option value="payco">페이앱</option>
+                        <option value="talktalk">톡톡</option>
+                    </select>
+                </div>
+
+                <button type="button" id="searchCalendarBtn" class="btn btn-primary" style="align-self: flex-end;">조회하기</button>
+            </div>
+
+            <div class="calendar-navigation">
+                <button id="prevMonth" class="btn btn-secondary">&lt; 이전</button>
+                <span id="currentMonth" class="current-month"></span>
+                <button id="nextMonth" class="btn btn-secondary">다음 &gt;</button>
+            </div>
+        </div>
+
+        <div id="quotaSummary" class="quota-summary" style="display: none;">
+            <div class="summary-item">
+                <span>총 물량</span>
+                <strong id="summaryTotal">-</strong>
+            </div>
+            <div class="summary-item">
+                <span>신청 물량</span>
+                <strong id="summaryRequested">-</strong>
+            </div>
+            <div class="summary-item">
+                <span>남은 물량</span>
+                <strong id="summaryRemaining">-</strong>
+            </div>
+            <div class="summary-item progress-item">
+                <span>진행률</span>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <span id="progressText">0%</span>
+            </div>
+        </div>
+
+        <div id="calendarContainer" class="calendar-container">
+            <p class="text-muted">조직을 선택하면 물량 현황을 확인할 수 있습니다.</p>
+        </div>
+    </div>
+
+    <script>
+        const orgSelect = document.getElementById('organization');
+        const serviceSelect = document.getElementById('service');
+        const channelSelect = document.getElementById('channel');
+        const searchCalendarBtn = document.getElementById('searchCalendarBtn');
+        const filterTypeSelect = document.getElementById('filterType');
+        const orgFilterGroup = document.getElementById('orgFilterGroup');
+        const serviceFilterGroup = document.getElementById('serviceFilterGroup');
+        const calendarContainer = document.getElementById('calendarContainer');
+        const quotaSummary = document.getElementById('quotaSummary');
+        const prevBtn = document.getElementById('prevMonth');
+        const nextBtn = document.getElementById('nextMonth');
+        const currentMonthSpan = document.getElementById('currentMonth');
+
+        let currentDate = new Date();
+        // 현재 월을 기본으로 설정
+
+        function updateMonthDisplay() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            currentMonthSpan.textContent = `${year}년 ${month}월`;
+        }
+
+        updateMonthDisplay();
+
+        prevBtn.addEventListener('click', () => {
+            currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+            updateMonthDisplay();
+            loadCalendar();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+            updateMonthDisplay();
+            loadCalendar();
+        });
+
+        // 필터 타입 변경
+        filterTypeSelect.addEventListener('change', async () => {
+            const filterType = filterTypeSelect.value;
+
+            if (filterType === 'all') {
+                orgFilterGroup.style.display = 'none';
+                serviceFilterGroup.style.display = 'none';
+                calendarContainer.innerHTML = '<p class="text-muted">조회하기 버튼을 눌러주세요.</p>';
+            } else if (filterType === 'organization') {
+                orgFilterGroup.style.display = 'block';
+                serviceFilterGroup.style.display = 'none';
+                calendarContainer.innerHTML = '<p class="text-muted">조회하기 버튼을 눌러주세요.</p>';
+            } else {
+                orgFilterGroup.style.display = 'none';
+                serviceFilterGroup.style.display = 'block';
+
+                // 모든 서비스 로드
+                try {
+                    const response = await fetch('/api/services');
+                    const services = await response.json();
+
+                    serviceSelect.innerHTML = '<option value="">서비스 선택</option>';
+                    services.forEach(service => {
+                        const option = document.createElement('option');
+                        option.value = service.id;
+                        option.textContent = `${service.organization_name} - ${service.name}`;
+                        serviceSelect.appendChild(option);
+                    });
+
+                    serviceSelect.disabled = false;
+                } catch (error) {
+                    console.error('서비스 목록 로드 실패:', error);
+                }
+
+                calendarContainer.innerHTML = '<p class="text-muted">서비스를 선택하면 물량 현황을 확인할 수 있습니다.</p>';
+            }
+
+            quotaSummary.style.display = 'none';
+        });
+
+        // 조회하기 버튼 클릭 시에만 로드
+        searchCalendarBtn.addEventListener('click', loadCalendar);
+
+        async function loadCalendar() {
+            const filterType = filterTypeSelect.value;
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+            const channel = channelSelect.value;
+
+            let apiUrl;
+
+            if (filterType === 'all') {
+                // 전체 현황 보기
+                apiUrl = `/api/calendar/all/${yearMonth}?channel=${channel}`;
+            } else if (filterType === 'organization') {
+                if (!orgSelect.value) {
+                    // 조직 선택 안 했을 때 전체 현황 보기
+                    apiUrl = `/api/calendar/all/${yearMonth}?channel=${channel}`;
+                } else {
+                    apiUrl = `/api/calendar/${orgSelect.value}/${yearMonth}?channel=${channel}`;
+                }
+            } else {
+                if (!serviceSelect.value) {
+                    calendarContainer.innerHTML = '<p class="text-muted">서비스를 선택하면 물량 현황을 확인할 수 있습니다.</p>';
+                    quotaSummary.style.display = 'none';
+                    return;
+                }
+                apiUrl = `/api/calendar/service/${serviceSelect.value}/${yearMonth}?channel=${channel}`;
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+
+                // 요약 정보 업데이트
+                document.getElementById('summaryTotal').textContent = data.total_quota.toLocaleString() + '건';
+                document.getElementById('summaryRequested').textContent = data.total_requested.toLocaleString() + '건';
+                document.getElementById('summaryRemaining').textContent = data.remaining.toLocaleString() + '건';
+
+                const progress = data.total_quota > 0 ? (data.total_requested / data.total_quota * 100) : 0;
+                document.getElementById('progressFill').style.width = progress + '%';
+                document.getElementById('progressText').textContent = progress.toFixed(1) + '%';
+
+                if (progress >= 90) {
+                    document.getElementById('progressFill').className = 'progress-fill exceeded';
+                } else if (progress >= 70) {
+                    document.getElementById('progressFill').className = 'progress-fill warning';
+                } else {
+                    document.getElementById('progressFill').className = 'progress-fill';
+                }
+
+                quotaSummary.style.display = 'grid';
+
+                // 달력 렌더링
+                renderCalendar(year, month, data.calendar_data);
+            } catch (error) {
+                alert('달력 데이터를 불러오는데 실패했습니다.');
+                console.error(error);
+            }
+        }
+
+        function renderCalendar(year, month, calendarData) {
+            const firstDay = new Date(year, month - 1, 1);
+            const lastDay = new Date(year, month, 0);
+            const daysInMonth = lastDay.getDate();
+            const startDayOfWeek = firstDay.getDay();
+
+            let html = '<table class="calendar">';
+            html += '<thead><tr>';
+            html += '<th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th>';
+            html += '</tr></thead><tbody><tr>';
+
+            // 빈 칸 채우기
+            for (let i = 0; i < startDayOfWeek; i++) {
+                html += '<td class="empty"></td>';
+            }
+
+            // 날짜 채우기
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayData = calendarData[dateStr] || [];
+                const totalQuantity = dayData.reduce((sum, item) => sum + item.quantity, 0);
+
+                const isWeekend = (startDayOfWeek + day - 1) % 7 === 0 || (startDayOfWeek + day - 1) % 7 === 6;
+                const cellClass = isWeekend ? 'weekend' : '';
+
+                html += `<td class="${cellClass}">`;
+                html += `<div class="date-number">${day}</div>`;
+
+                if (dayData.length > 0) {
+                    html += '<div class="day-requests">';
+                    dayData.forEach(item => {
+                        const channelBadge = getChannelBadge(item.channel);
+                        html += `<div class="request-item">`;
+                        html += `<span class="service-name">${item.service} ${channelBadge}</span>`;
+                        html += `<span class="quantity">${item.quantity.toLocaleString()}</span>`;
+                        html += `</div>`;
+                    });
+                    html += `<div class="day-total">합계: ${totalQuantity.toLocaleString()}건</div>`;
+                    html += '</div>';
+                }
+
+                html += '</td>';
+
+                if ((startDayOfWeek + day) % 7 === 0) {
+                    html += '</tr><tr>';
+                }
+            }
+
+            // 마지막 행 빈 칸 채우기
+            const remainingCells = (7 - (startDayOfWeek + daysInMonth) % 7) % 7;
+            for (let i = 0; i < remainingCells; i++) {
+                html += '<td class="empty"></td>';
+            }
+
+            html += '</tr></tbody></table>';
+            calendarContainer.innerHTML = html;
+        }
+
+        function getChannelBadge(channel) {
+            const channelNames = {
+                'naver': '네이버',
+                'payco': '페이코',
+                'talktalk': '톡톡'
+            };
+            const channelClasses = {
+                'naver': 'channel-naver',
+                'payco': 'channel-payco',
+                'talktalk': 'channel-talktalk'
+            };
+            return `<span class="channel-badge ${channelClasses[channel]}">${channelNames[channel]}</span>`;
+        }
+    </script>
+</body>
+</html>
