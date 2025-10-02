@@ -62,6 +62,87 @@ body {
     padding: 0 2rem;
 }
 
+/* 캠페인 신청 페이지 전용 컨테이너 */
+.request-container {
+    max-width: 1400px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+}
+
+/* 2단 레이아웃 */
+.two-column-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.request-form-section {
+    position: sticky;
+    top: 2rem;
+}
+
+.request-list-section {
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+}
+
+.request-list-section h3 {
+    font-size: 1.1rem;
+}
+
+.request-list-section .quota-table {
+    font-size: 0.85rem;
+}
+
+.request-list-section .quota-table th,
+.request-list-section .quota-table td {
+    padding: 0.6rem;
+}
+
+.request-list-section .quota-value {
+    font-size: 1rem;
+}
+
+.request-list-section .channel-badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+}
+
+/* 스크롤바 스타일 */
+.request-list-section::-webkit-scrollbar {
+    width: 8px;
+}
+
+.request-list-section::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.request-list-section::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.request-list-section::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* 반응형: 작은 화면에서는 세로로 */
+@media (max-width: 1024px) {
+    .two-column-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .request-form-section {
+        position: static;
+    }
+
+    .request-list-section {
+        max-height: none;
+    }
+}
+
 h2 {
     font-size: 1.8rem;
     margin-bottom: 1.5rem;
@@ -621,6 +702,19 @@ h3 {
 .btn-delete:hover {
     background-color: #c0392b;
     transform: translateY(-1px);
+}
+
+/* 인라인 편집 */
+.editable-text {
+    display: inline;
+}
+
+.edit-input {
+    width: 200px;
+    padding: 0.5rem;
+    border: 2px solid #3498db;
+    border-radius: 4px;
+    font-size: 0.95rem;
 }
 
 /* 기타 */

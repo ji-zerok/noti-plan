@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>캠페인 신청</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -18,7 +19,7 @@
         </div>
     </nav>
 
-    <div class="container">
+    <div class="request-container">
         <h2>캠페인 신청</h2>
 
         <div class="info-box">
@@ -32,129 +33,162 @@
             </ul>
         </div>
 
-        <div class="form-card">
-            <form id="requestForm">
-                <div class="form-group">
-                    <label for="organization">조직</label>
-                    <select id="organization" required>
-                        <option value="">조직 선택</option>
-                        {% for org in organizations %}
-                        <option value="{{ org.id }}">{{ org.name }}</option>
-                        {% endfor %}
-                    </select>
+        <div class="two-column-layout">
+            <!-- 왼쪽: 신청 폼 -->
+            <div class="request-form-section">
+                <div class="form-card">
+                    <form id="requestForm">
+                        <!-- 조직-서비스 한 줄 -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div>
+                                <label for="organization" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">조직</label>
+                                <select id="organization" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                    <option value="">조직 선택</option>
+                                    {% for org in organizations %}
+                                    <option value="{{ org.id }}">{{ org.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="service" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">서비스</label>
+                                <select id="service" required disabled style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                    <option value="">먼저 조직을 선택하세요</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="channel">발송 채널</label>
+                            <select id="channel" required>
+                                <option value="naver">네이버앱</option>
+                                <option value="payco">페이앱</option>
+                                <option value="talktalk">톡톡</option>
+                            </select>
+                        </div>
+
+                        <!-- 발송 날짜-시간 한 줄 -->
+                        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div>
+                                <label for="sendDate" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">발송 날짜</label>
+                                <input type="date" id="sendDate" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                            </div>
+                            <div>
+                                <label for="sendTime" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">발송 시간</label>
+                                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap;">
+                                    <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
+                                        <input type="radio" name="ampm" value="AM" checked>
+                                        <span>오전</span>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
+                                        <input type="radio" name="ampm" value="PM">
+                                        <span>오후</span>
+                                    </label>
+                                    <select id="sendHour" required style="width: auto; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                        <option value="">시</option>
+                                        <option value="09">09</option>
+                                        <option value="10">10</option>
+                                        <option value="11">11</option>
+                                        <option value="12">12</option>
+                                        <option value="01">01</option>
+                                        <option value="02">02</option>
+                                        <option value="03">03</option>
+                                        <option value="04">04</option>
+                                        <option value="05">05</option>
+                                        <option value="06">06</option>
+                                        <option value="07">07</option>
+                                        <option value="08">08</option>
+                                    </select>
+                                    <span>시</span>
+                                    <select id="sendMinute" required style="width: auto; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                        <option value="">분</option>
+                                        <option value="00">00</option>
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="30">30</option>
+                                        <option value="40">40</option>
+                                        <option value="50">50</option>
+                                    </select>
+                                    <span>분</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="campaignName">캠페인명</label>
+                            <input type="text" id="campaignName" placeholder="예: 신용대출 프로모션" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quantity">발송 물량</label>
+                            <input type="text" id="quantityDisplay" placeholder="예: 35만" required>
+                            <input type="hidden" id="quantity">
+                            <div class="quantity-display">
+                                <span id="quantityRealValue">0건</span>
+                            </div>
+                        </div>
+
+                        <div id="quotaInfo" class="quota-info" style="display: none;">
+                            <div class="quota-detail">
+                                <span>조직 총 물량:</span>
+                                <strong id="totalQuota">-</strong>
+                            </div>
+                            <div class="quota-detail">
+                                <span>신청된 물량:</span>
+                                <strong id="requestedQuota">-</strong>
+                            </div>
+                            <div class="quota-detail">
+                                <span>남은 물량:</span>
+                                <strong id="remainingQuota" class="remaining">-</strong>
+                            </div>
+                            <div class="quota-detail" style="border-top: 2px solid #3498db; padding-top: 1rem; margin-top: 0.5rem;">
+                                <span style="font-size: 1.1rem;">✅ 신청 가능 물량:</span>
+                                <strong id="availableQuota" style="font-size: 1.3rem; color: #27ae60;">-</strong>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">신청하기</button>
+                    </form>
                 </div>
-
-                <div class="form-group">
-                    <label for="service">서비스</label>
-                    <select id="service" required disabled>
-                        <option value="">먼저 조직을 선택하세요</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="channel">발송 채널</label>
-                    <select id="channel" required>
-                        <option value="naver">네이버앱</option>
-                        <option value="payco">페이앱</option>
-                        <option value="talktalk">톡톡</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="sendDate">발송 날짜</label>
-                    <input type="date" id="sendDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="sendTime">발송 시간</label>
-                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap;">
-                        <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
-                            <input type="radio" name="ampm" value="AM" checked>
-                            <span>오전</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
-                            <input type="radio" name="ampm" value="PM">
-                            <span>오후</span>
-                        </label>
-                        <select id="sendHour" style="width: auto;">
-                            <option value="">시</option>
-                            <option value="09">09</option>
-                            <option value="10">10</option>
-                            <option value="11">11</option>
-                            <option value="12">12</option>
-                            <option value="01">01</option>
-                            <option value="02">02</option>
-                            <option value="03">03</option>
-                            <option value="04">04</option>
-                            <option value="05">05</option>
-                            <option value="06">06</option>
-                            <option value="07">07</option>
-                            <option value="08">08</option>
-                        </select>
-                        <span>시</span>
-                        <select id="sendMinute" style="width: auto;">
-                            <option value="">분</option>
-                            <option value="00">00</option>
-                            <option value="10">10</option>
-                            <option value="20">20</option>
-                            <option value="30">30</option>
-                            <option value="40">40</option>
-                            <option value="50">50</option>
-                        </select>
-                        <span>분</span>
-                    </div>
-                    <small class="help-text">선택사항</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="campaignName">캠페인명</label>
-                    <input type="text" id="campaignName" placeholder="예: 신용대출 프로모션">
-                    <small class="help-text">선택사항</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="quantity">발송 물량</label>
-                    <input type="text" id="quantityDisplay" placeholder="예: 35만" required>
-                    <input type="hidden" id="quantity">
-                    <div class="quantity-display">
-                        <span id="quantityRealValue">0건</span>
-                    </div>
-                    <small class="help-text">예시: 1천(1,000) / 5만(50,000) / 35만(350,000)</small>
-                </div>
-
-                <div id="quotaInfo" class="quota-info" style="display: none;">
-                    <div class="quota-detail">
-                        <span>조직 총 물량:</span>
-                        <strong id="totalQuota">-</strong>
-                    </div>
-                    <div class="quota-detail">
-                        <span>신청된 물량:</span>
-                        <strong id="requestedQuota">-</strong>
-                    </div>
-                    <div class="quota-detail">
-                        <span>남은 물량:</span>
-                        <strong id="remainingQuota" class="remaining">-</strong>
-                    </div>
-                    <div class="quota-detail" style="border-top: 2px solid #3498db; padding-top: 1rem; margin-top: 0.5rem;">
-                        <span style="font-size: 1.1rem;">✅ 신청 가능 물량:</span>
-                        <strong id="availableQuota" style="font-size: 1.3rem; color: #27ae60;">-</strong>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-primary">신청하기</button>
-            </form>
-        </div>
-
-        <h2 style="margin-top: 3rem;">신청된 캠페인 목록</h2>
-        <div class="form-card">
-            <div class="form-group">
-                <label for="requestListService">서비스 선택</label>
-                <select id="requestListService">
-                    <option value="">서비스를 선택하세요</option>
-                </select>
             </div>
-            <div id="requestListContainer">
-                <p class="text-muted">서비스를 선택하면 신청 목록을 확인할 수 있습니다.</p>
+
+            <!-- 오른쪽: 캠페인 목록 -->
+            <div class="request-list-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">신청된 캠페인 목록</h3>
+                    <button id="downloadExcel" class="btn btn-primary" style="display: none; padding: 0.5rem 1rem; font-size: 0.9rem;">
+                        📥 Excel 다운로드
+                    </button>
+                </div>
+                <div class="form-card">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="viewType">조회 범위</label>
+                            <select id="viewType">
+                                <option value="all">전체</option>
+                                <option value="org">조직별</option>
+                                <option value="service">서비스별</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="requestListOrg">조직 선택</label>
+                            <select id="requestListOrg" disabled>
+                                <option value="">조직 선택</option>
+                                {% for org in organizations %}
+                                <option value="{{ org.id }}">{{ org.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="requestListService">서비스 선택</label>
+                            <select id="requestListService" disabled>
+                                <option value="">서비스 선택</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="requestListContainer">
+                        <p class="text-muted">조회 범위를 선택하세요.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -342,6 +376,13 @@
                 }
 
                 finalTime = `${finalHour}:${minute}`;
+
+                // 시간 범위 검증 (오전 9시 ~ 오후 8시)
+                const hourInt = parseInt(finalHour);
+                if (hourInt < 9 || hourInt > 20) {
+                    alert('발송 시간은 오전 9시부터 오후 8시 사이로 설정해주세요.');
+                    return;
+                }
             }
 
             const data = {
@@ -390,31 +431,156 @@
         });
 
         // 신청 목록 로드
-        requestListServiceSelect.addEventListener('change', loadRequestList);
+        const downloadExcelBtn = document.getElementById('downloadExcel');
+        const viewTypeSelect = document.getElementById('viewType');
+        const requestListOrgSelect = document.getElementById('requestListOrg');
+        let currentRequests = []; // 현재 로드된 요청 데이터 저장
+        let currentViewType = 'all'; // 현재 조회 타입
+        let currentViewName = '전체'; // 현재 조회 이름 (Excel 파일명용)
 
-        async function loadRequestList() {
-            const serviceId = requestListServiceSelect.value;
+        // 조회 범위 변경 시
+        viewTypeSelect.addEventListener('change', () => {
+            const viewType = viewTypeSelect.value;
 
-            if (!serviceId) {
-                requestListContainer.innerHTML = '<p class="text-muted">서비스를 선택하면 신청 목록을 확인할 수 있습니다.</p>';
+            if (viewType === 'all') {
+                requestListOrgSelect.disabled = true;
+                requestListOrgSelect.value = '';
+                requestListServiceSelect.disabled = true;
+                requestListServiceSelect.value = '';
+                requestListServiceSelect.innerHTML = '<option value="">서비스 선택</option>';
+                loadRequestList();
+            } else if (viewType === 'org') {
+                requestListOrgSelect.disabled = false;
+                requestListOrgSelect.value = '';
+                requestListServiceSelect.disabled = true;
+                requestListServiceSelect.value = '';
+                requestListServiceSelect.innerHTML = '<option value="">서비스 선택</option>';
+                requestListContainer.innerHTML = '<p class="text-muted">조직을 선택하세요.</p>';
+                downloadExcelBtn.style.display = 'none';
+            } else if (viewType === 'service') {
+                requestListOrgSelect.disabled = false;
+                requestListOrgSelect.value = '';
+                requestListServiceSelect.disabled = true;
+                requestListServiceSelect.value = '';
+                requestListServiceSelect.innerHTML = '<option value="">먼저 조직을 선택하세요</option>';
+                requestListContainer.innerHTML = '<p class="text-muted">조직과 서비스를 선택하세요.</p>';
+                downloadExcelBtn.style.display = 'none';
+            }
+        });
+
+        // 조직 선택 변경 시
+        requestListOrgSelect.addEventListener('change', async () => {
+            const viewType = viewTypeSelect.value;
+            const orgId = requestListOrgSelect.value;
+
+            if (!orgId) {
+                requestListServiceSelect.disabled = true;
+                requestListServiceSelect.value = '';
+                requestListServiceSelect.innerHTML = '<option value="">서비스 선택</option>';
+                requestListContainer.innerHTML = '<p class="text-muted">조직을 선택하세요.</p>';
+                downloadExcelBtn.style.display = 'none';
                 return;
             }
 
+            if (viewType === 'org') {
+                loadRequestList();
+            } else if (viewType === 'service') {
+                // 서비스 목록 로드
+                try {
+                    const response = await fetch(`/api/services/${orgId}`);
+                    const services = await response.json();
+
+                    requestListServiceSelect.innerHTML = '<option value="">서비스 선택</option>';
+                    services.forEach(service => {
+                        const option = document.createElement('option');
+                        option.value = service.id;
+                        option.textContent = service.name;
+                        requestListServiceSelect.appendChild(option);
+                    });
+                    requestListServiceSelect.disabled = false;
+                    requestListContainer.innerHTML = '<p class="text-muted">서비스를 선택하세요.</p>';
+                    downloadExcelBtn.style.display = 'none';
+                } catch (error) {
+                    console.error('서비스 목록 로드 실패:', error);
+                }
+            }
+        });
+
+        // 서비스 선택 변경 시
+        requestListServiceSelect.addEventListener('change', loadRequestList);
+
+        async function loadRequestList() {
+            const viewType = viewTypeSelect.value;
+            const orgId = requestListOrgSelect.value;
+            const serviceId = requestListServiceSelect.value;
+
+            let apiUrl = '';
+            currentViewType = viewType;
+
+            if (viewType === 'all') {
+                apiUrl = '/api/requests/all';
+                currentViewName = '전체';
+            } else if (viewType === 'org') {
+                if (!orgId) {
+                    requestListContainer.innerHTML = '<p class="text-muted">조직을 선택하세요.</p>';
+                    downloadExcelBtn.style.display = 'none';
+                    return;
+                }
+                apiUrl = `/api/requests/org/${orgId}`;
+                currentViewName = requestListOrgSelect.options[requestListOrgSelect.selectedIndex].text;
+            } else if (viewType === 'service') {
+                if (!serviceId) {
+                    requestListContainer.innerHTML = '<p class="text-muted">서비스를 선택하세요.</p>';
+                    downloadExcelBtn.style.display = 'none';
+                    return;
+                }
+                apiUrl = `/api/requests/${serviceId}`;
+                currentViewName = requestListServiceSelect.options[requestListServiceSelect.selectedIndex].text;
+            }
+
             try {
-                const response = await fetch(`/api/requests/${serviceId}`);
+                const response = await fetch(apiUrl);
                 const requests = await response.json();
+
+                currentRequests = requests; // 데이터 저장
 
                 if (requests.length === 0) {
                     requestListContainer.innerHTML = '<p class="text-muted">신청된 캠페인이 없습니다.</p>';
+                    downloadExcelBtn.style.display = 'none';
                     return;
                 }
 
-                let html = '<table class="quota-table"><thead><tr>';
-                html += '<th>발송일시</th><th>채널</th><th>캠페인명</th><th>물량</th><th>등록일시</th><th>작업</th>';
+                downloadExcelBtn.style.display = 'inline-block'; // 다운로드 버튼 표시
+
+                let html = '<table class="quota-table sortable"><thead><tr>';
+
+                // 조회 타입에 따라 컬럼 추가
+                if (viewType === 'all') {
+                    html += '<th class="sortable-header" data-sort-type="text">조직 <span class="sort-arrow"></span></th>';
+                    html += '<th class="sortable-header" data-sort-type="text">서비스 <span class="sort-arrow"></span></th>';
+                } else if (viewType === 'org') {
+                    html += '<th class="sortable-header" data-sort-type="text">서비스 <span class="sort-arrow"></span></th>';
+                }
+
+                html += '<th class="sortable-header" data-sort-type="text">발송일시 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">채널 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">캠페인명 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="number">물량 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">등록일시 <span class="sort-arrow"></span></th>';
+                html += '<th>작업</th>';
                 html += '</tr></thead><tbody>';
 
                 requests.forEach(req => {
                     html += '<tr>';
+
+                    // 조회 타입에 따라 조직/서비스 컬럼 추가
+                    if (viewType === 'all') {
+                        html += `<td><strong>${req.org_name}</strong></td>`;
+                        html += `<td>${req.service_name}</td>`;
+                    } else if (viewType === 'org') {
+                        html += `<td>${req.service_name}</td>`;
+                    }
+
                     const dateTime = req.send_time !== '-' ? `${req.send_date} ${req.send_time}` : req.send_date;
                     html += `<td>${dateTime}</td>`;
                     html += `<td><span class="channel-badge channel-${req.channel}">${req.channel_name}</span></td>`;
@@ -427,6 +593,7 @@
 
                 html += '</tbody></table>';
                 requestListContainer.innerHTML = html;
+                makeSortable();
             } catch (error) {
                 console.error('신청 목록 로드 실패:', error);
                 requestListContainer.innerHTML = '<p class="text-muted">신청 목록을 불러오는데 실패했습니다.</p>';
@@ -458,6 +625,159 @@
                 console.error(error);
             }
         };
+
+        // Excel 다운로드 기능
+        downloadExcelBtn.addEventListener('click', () => {
+            if (currentRequests.length === 0) {
+                alert('다운로드할 데이터가 없습니다.');
+                return;
+            }
+
+            // Excel 데이터 준비 - 조회 타입에 따라 컬럼 구성
+            let excelData;
+            let colWidths;
+
+            if (currentViewType === 'all') {
+                excelData = currentRequests.map(req => ({
+                    '조직': req.org_name,
+                    '서비스': req.service_name,
+                    '발송일자': req.send_date,
+                    '발송시간': req.send_time || '-',
+                    '채널': req.channel_name,
+                    '캠페인명': req.campaign_name || '-',
+                    '물량': req.quantity,
+                    '등록일시': req.created_at
+                }));
+                colWidths = [
+                    { wch: 15 }, // 조직
+                    { wch: 20 }, // 서비스
+                    { wch: 12 }, // 발송일자
+                    { wch: 10 }, // 발송시간
+                    { wch: 10 }, // 채널
+                    { wch: 30 }, // 캠페인명
+                    { wch: 12 }, // 물량
+                    { wch: 18 }  // 등록일시
+                ];
+            } else if (currentViewType === 'org') {
+                excelData = currentRequests.map(req => ({
+                    '서비스': req.service_name,
+                    '발송일자': req.send_date,
+                    '발송시간': req.send_time || '-',
+                    '채널': req.channel_name,
+                    '캠페인명': req.campaign_name || '-',
+                    '물량': req.quantity,
+                    '등록일시': req.created_at
+                }));
+                colWidths = [
+                    { wch: 20 }, // 서비스
+                    { wch: 12 }, // 발송일자
+                    { wch: 10 }, // 발송시간
+                    { wch: 10 }, // 채널
+                    { wch: 30 }, // 캠페인명
+                    { wch: 12 }, // 물량
+                    { wch: 18 }  // 등록일시
+                ];
+            } else {
+                excelData = currentRequests.map(req => ({
+                    '발송일자': req.send_date,
+                    '발송시간': req.send_time || '-',
+                    '채널': req.channel_name,
+                    '캠페인명': req.campaign_name || '-',
+                    '물량': req.quantity,
+                    '등록일시': req.created_at
+                }));
+                colWidths = [
+                    { wch: 12 }, // 발송일자
+                    { wch: 10 }, // 발송시간
+                    { wch: 10 }, // 채널
+                    { wch: 30 }, // 캠페인명
+                    { wch: 12 }, // 물량
+                    { wch: 18 }  // 등록일시
+                ];
+            }
+
+            // 워크시트 생성
+            const ws = XLSX.utils.json_to_sheet(excelData);
+
+            // 열 너비 설정
+            ws['!cols'] = colWidths;
+
+            // 워크북 생성
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '캠페인목록');
+
+            // 파일명 생성 (조회명_날짜)
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+            const filename = `${currentViewName}_캠페인목록_${dateStr}.xlsx`;
+
+            // 다운로드
+            XLSX.writeFile(wb, filename);
+        });
+
+        // 테이블 정렬 기능
+        function makeSortable() {
+            const tables = document.querySelectorAll('.sortable');
+            tables.forEach(table => {
+                const headers = table.querySelectorAll('.sortable-header');
+                headers.forEach((header, index) => {
+                    header.style.cursor = 'pointer';
+                    header.addEventListener('click', () => {
+                        sortTable(table, index, header.getAttribute('data-sort-type'));
+                    });
+                });
+            });
+        }
+
+        function sortTable(table, columnIndex, sortType) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const header = table.querySelectorAll('.sortable-header')[columnIndex];
+            const allHeaders = table.querySelectorAll('.sortable-header');
+
+            // 현재 정렬 방향 확인
+            const isAscending = header.classList.contains('sort-asc');
+
+            // 모든 헤더의 정렬 표시 제거
+            allHeaders.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+                const arrow = h.querySelector('.sort-arrow');
+                if (arrow) arrow.textContent = '';
+            });
+
+            // 새로운 정렬 방향 설정
+            const ascending = !isAscending;
+            header.classList.add(ascending ? 'sort-asc' : 'sort-desc');
+            const arrow = header.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = ascending ? ' ▲' : ' ▼';
+
+            // 행 정렬
+            rows.sort((a, b) => {
+                const aCell = a.cells[columnIndex];
+                const bCell = b.cells[columnIndex];
+
+                let aValue = aCell.textContent.trim();
+                let bValue = bCell.textContent.trim();
+
+                if (sortType === 'number') {
+                    // 숫자와 쉼표 제거
+                    aValue = parseInt(aValue.replace(/[^0-9]/g, '')) || 0;
+                    bValue = parseInt(bValue.replace(/[^0-9]/g, '')) || 0;
+                    return ascending ? aValue - bValue : bValue - aValue;
+                } else {
+                    // 텍스트 정렬
+                    return ascending
+                        ? aValue.localeCompare(bValue, 'ko')
+                        : bValue.localeCompare(aValue, 'ko');
+                }
+            });
+
+            // 정렬된 행을 다시 추가
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // 페이지 로드 시 전체 목록 자동 조회
+        loadRequestList();
     </script>
 </body>
 </html>

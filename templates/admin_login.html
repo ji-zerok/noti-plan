@@ -12,22 +12,26 @@
             align-items: center;
             min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
         }
 
         .login-box {
             background: white;
-            padding: 3rem;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             width: 100%;
-            max-width: 400px;
+            max-width: 300px;
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
         }
 
         .login-box h1 {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             color: #2c3e50;
-            font-size: 2rem;
+            font-size: 1.2rem;
         }
 
         .login-box .form-group {
@@ -35,31 +39,49 @@
         }
 
         .login-box input[type="password"] {
-            font-size: 1.1rem;
-            padding: 1rem;
+            font-size: 0.95rem;
+            padding: 0.6rem;
         }
 
         .login-box .btn {
             width: 100%;
-            padding: 1rem;
-            font-size: 1.1rem;
+            padding: 0.6rem;
+            font-size: 0.95rem;
         }
 
-        .public-links {
+        .main-links {
             text-align: center;
-            margin-top: 1.5rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid #eee;
+            margin-bottom: 3rem;
         }
 
-        .public-links a {
-            color: #3498db;
+        .main-links h2 {
+            color: white;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+        }
+
+        .main-links .link-buttons {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .main-links a {
+            background: white;
+            color: #667eea;
+            padding: 1.5rem 3rem;
+            border-radius: 12px;
             text-decoration: none;
-            margin: 0 0.5rem;
+            font-size: 1.3rem;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
         }
 
-        .public-links a:hover {
-            text-decoration: underline;
+        .main-links a:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
         }
 
         .error-message {
@@ -74,25 +96,26 @@
 </head>
 <body>
     <div class="login-container">
+        <div class="main-links">
+            <h2>광고성 알림 물량 관리</h2>
+            <div class="link-buttons">
+                <a href="/request">📝 캠페인 신청</a>
+                <a href="/calendar">📅 현황 보기</a>
+            </div>
+        </div>
+
         <div class="login-box">
-            <h1>🔐 관리자 로그인</h1>
+            <h1>🔐 관리자</h1>
 
             <div id="errorMessage" class="error-message"></div>
 
             <form id="loginForm">
                 <div class="form-group">
-                    <label for="password">비밀번호</label>
-                    <input type="password" id="password" placeholder="비밀번호를 입력하세요" required autofocus>
+                    <input type="password" id="password" placeholder="비밀번호" required autofocus>
                 </div>
 
                 <button type="submit" class="btn btn-primary">로그인</button>
             </form>
-
-            <div class="public-links">
-                <p>관리자가 아니신가요?</p>
-                <a href="/request">물량 신청</a> |
-                <a href="/calendar">현황 보기</a>
-            </div>
         </div>
     </div>
 

@@ -21,6 +21,13 @@
     <div class="container">
         <h2>물량 현황</h2>
 
+        <!-- 뷰 탭 -->
+        <div class="admin-tabs" style="margin-bottom: 1rem;">
+            <button class="tab-btn active" data-view="monthly">월간</button>
+            <button class="tab-btn" data-view="weekly">주간</button>
+            <button class="tab-btn" data-view="daily">일간</button>
+        </div>
+
         <div class="calendar-controls">
             <div class="filter-group">
                 <div class="form-group">
@@ -63,9 +70,10 @@
             </div>
 
             <div class="calendar-navigation">
-                <button id="prevMonth" class="btn btn-secondary">&lt; 이전</button>
-                <span id="currentMonth" class="current-month"></span>
-                <button id="nextMonth" class="btn btn-secondary">다음 &gt;</button>
+                <button id="prevBtn" class="btn btn-secondary">&lt; 이전</button>
+                <span id="currentPeriod" class="current-month"></span>
+                <button id="nextBtn" class="btn btn-secondary">다음 &gt;</button>
+                <input type="date" id="datePicker" style="display: none; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
             </div>
         </div>
 
@@ -106,30 +114,100 @@
         const serviceFilterGroup = document.getElementById('serviceFilterGroup');
         const calendarContainer = document.getElementById('calendarContainer');
         const quotaSummary = document.getElementById('quotaSummary');
-        const prevBtn = document.getElementById('prevMonth');
-        const nextBtn = document.getElementById('nextMonth');
-        const currentMonthSpan = document.getElementById('currentMonth');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const currentPeriodSpan = document.getElementById('currentPeriod');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const datePicker = document.getElementById('datePicker');
 
         let currentDate = new Date();
-        // 현재 월을 기본으로 설정
+        let currentView = 'monthly'; // 'monthly', 'weekly', 'daily'
 
-        function updateMonthDisplay() {
+        // 날짜 선택기 초기화
+        const today = new Date();
+        datePicker.value = today.toISOString().split('T')[0];
+
+        // 날짜 선택기 변경 이벤트
+        datePicker.addEventListener('change', () => {
+            currentDate = new Date(datePicker.value);
+            updatePeriodDisplay();
+            loadCalendar();
+        });
+
+        // 탭 클릭 이벤트
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentView = btn.dataset.view;
+
+                // 일간 뷰에서는 날짜 선택기 표시
+                if (currentView === 'daily') {
+                    datePicker.style.display = 'block';
+                    prevBtn.style.display = 'none';
+                    nextBtn.style.display = 'none';
+                    currentPeriodSpan.style.display = 'none';
+                } else {
+                    datePicker.style.display = 'none';
+                    prevBtn.style.display = 'inline-block';
+                    nextBtn.style.display = 'inline-block';
+                    currentPeriodSpan.style.display = 'inline-block';
+                }
+
+                updatePeriodDisplay();
+                loadCalendar();
+            });
+        });
+
+        function updatePeriodDisplay() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            currentMonthSpan.textContent = `${year}년 ${month}월`;
+            const day = currentDate.getDate();
+
+            if (currentView === 'monthly') {
+                currentPeriodSpan.textContent = `${year}년 ${month}월`;
+            } else if (currentView === 'weekly') {
+                const weekStart = getWeekStart(currentDate);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                currentPeriodSpan.textContent = `${weekStart.getFullYear()}.${String(weekStart.getMonth() + 1).padStart(2, '0')}.${String(weekStart.getDate()).padStart(2, '0')} ~ ${weekEnd.getFullYear()}.${String(weekEnd.getMonth() + 1).padStart(2, '0')}.${String(weekEnd.getDate()).padStart(2, '0')}`;
+            } else {
+                currentPeriodSpan.textContent = `${year}년 ${month}월 ${day}일`;
+            }
         }
 
-        updateMonthDisplay();
+        function getWeekStart(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = day === 0 ? -6 : 1 - day; // 월요일 시작
+            d.setDate(d.getDate() + diff);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        updatePeriodDisplay();
 
         prevBtn.addEventListener('click', () => {
-            currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-            updateMonthDisplay();
+            if (currentView === 'monthly') {
+                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+            } else if (currentView === 'weekly') {
+                currentDate = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+            } else {
+                currentDate = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000);
+            }
+            updatePeriodDisplay();
             loadCalendar();
         });
 
         nextBtn.addEventListener('click', () => {
-            currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-            updateMonthDisplay();
+            if (currentView === 'monthly') {
+                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+            } else if (currentView === 'weekly') {
+                currentDate = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+            } else {
+                currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+            updatePeriodDisplay();
             loadCalendar();
         });
 
@@ -227,15 +305,21 @@
 
                 quotaSummary.style.display = 'grid';
 
-                // 달력 렌더링
-                renderCalendar(year, month, data.calendar_data);
+                // 뷰에 따른 렌더링
+                if (currentView === 'monthly') {
+                    renderMonthlyCalendar(year, month, data.calendar_data);
+                } else if (currentView === 'weekly') {
+                    renderWeeklyView(data.calendar_data);
+                } else {
+                    renderDailyView(data.calendar_data);
+                }
             } catch (error) {
                 alert('달력 데이터를 불러오는데 실패했습니다.');
                 console.error(error);
             }
         }
 
-        function renderCalendar(year, month, calendarData) {
+        function renderMonthlyCalendar(year, month, calendarData) {
             const firstDay = new Date(year, month - 1, 1);
             const lastDay = new Date(year, month, 0);
             const daysInMonth = lastDay.getDate();
@@ -264,15 +348,35 @@
                 html += `<div class="date-number">${day}</div>`;
 
                 if (dayData.length > 0) {
-                    html += '<div class="day-requests">';
+                    // 시간 순으로 정렬
+                    dayData.sort((a, b) => {
+                        const timeA = a.time || '99:99';
+                        const timeB = b.time || '99:99';
+                        return timeA.localeCompare(timeB);
+                    });
+
+                    html += '<div class="day-requests" style="font-size: 0.7rem;">';
                     dayData.forEach(item => {
-                        const channelBadge = getChannelBadge(item.channel);
-                        html += `<div class="request-item">`;
-                        html += `<span class="service-name">${item.service} ${channelBadge}</span>`;
-                        html += `<span class="quantity">${item.quantity.toLocaleString()}</span>`;
+                        // 채널별 색상
+                        const channelColors = {
+                            'naver': '#03C75A',
+                            'payco': '#3498db',
+                            'talktalk': '#FFA000'
+                        };
+                        const borderColor = channelColors[item.channel] || '#3498db';
+                        const timeStr = item.time ? `${item.time} ` : '';
+
+                        const tooltipContent = `시간: ${item.time || '미정'}\\n서비스: ${item.service}\\n캠페인: ${item.campaign_name || '-'}\\n물량: ${item.quantity.toLocaleString()}건\\n채널: ${getChannelName(item.channel)}`;
+
+                        html += `<div style="margin-bottom: 0.2rem; padding: 0.2rem 0.3rem; background: #ffffff; border-radius: 2px; border-left: 3px solid ${borderColor}; font-size: 0.65rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer;" title="${tooltipContent}">`;
+                        html += `<div style="font-weight: 700; color: #2c3e50; margin-bottom: 0.1rem;">${timeStr}<span style="font-size: 0.6rem; color: #7f8c8d; font-weight: 500;">${item.quantity.toLocaleString()}건</span></div>`;
+                        html += `<div style="font-size: 0.6rem; color: #34495e; line-height: 1.2; word-wrap: break-word;">${item.service}</div>`;
+                        if (item.campaign_name) {
+                            html += `<div style="font-size: 0.55rem; color: #95a5a6; line-height: 1.1; word-wrap: break-word;">${item.campaign_name}</div>`;
+                        }
                         html += `</div>`;
                     });
-                    html += `<div class="day-total">합계: ${totalQuantity.toLocaleString()}건</div>`;
+                    html += `<div class="day-total" style="font-size: 0.7rem;">합계: ${totalQuantity.toLocaleString()}건</div>`;
                     html += '</div>';
                 }
 
@@ -293,10 +397,169 @@
             calendarContainer.innerHTML = html;
         }
 
+        function renderWeeklyView(calendarData) {
+            const weekStart = getWeekStart(currentDate);
+
+            // 시간대별로 데이터 구성 (09:00 ~ 20:00, + 시간미정)
+            const hours = [];
+            for (let h = 9; h <= 20; h++) {
+                hours.push(String(h).padStart(2, '0'));
+            }
+            hours.push('none'); // 시간 미정
+
+            // 주간 날짜 배열 생성
+            const weekDates = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() + i);
+                weekDates.push(d);
+            }
+
+            let html = '<div style="overflow-x: auto;"><table class="calendar" style="min-width: 900px;"><thead><tr>';
+            html += '<th style="width: 80px;">시간</th>';
+
+            weekDates.forEach((d, i) => {
+                const isWeekend = i >= 5;
+                const headerClass = isWeekend ? 'weekend' : '';
+                html += `<th class="${headerClass}">${['월','화','수','목','금','토','일'][i]}<br/>${d.getMonth()+1}/${d.getDate()}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            // 각 시간대별 행 생성
+            hours.forEach(hour => {
+                html += '<tr>';
+                const displayHour = hour === 'none' ? '시간미정' : `${hour}:00`;
+                html += `<td style="font-weight: 600; text-align: center; background: #f8f9fa;">${displayHour}</td>`;
+
+                weekDates.forEach((d, i) => {
+                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    const dayData = calendarData[dateStr] || [];
+
+                    // 해당 시간대에 표시될 캠페인 필터링
+                    const hourData = dayData.filter(item => {
+                        if (hour === 'none') {
+                            return !item.time; // 시간 미정
+                        }
+                        if (!item.time) return false;
+
+                        const itemHour = item.time.split(':')[0];
+                        return itemHour === hour;
+                    });
+
+                    const isWeekend = i >= 5;
+                    const cellClass = isWeekend ? 'weekend' : '';
+
+                    html += `<td class="${cellClass}" style="padding: 0.3rem; font-size: 0.8rem; vertical-align: top;">`;
+
+                    if (hourData.length > 0) {
+                        // 시간 순으로 정렬 (분 단위까지)
+                        hourData.sort((a, b) => {
+                            return (a.time || '99:99').localeCompare(b.time || '99:99');
+                        });
+
+                        hourData.forEach(item => {
+                            // 채널별 색상
+                            const channelColors = {
+                                'naver': '#03C75A',
+                                'payco': '#3498db',
+                                'talktalk': '#FFA000'
+                            };
+                            const borderColor = channelColors[item.channel] || '#3498db';
+
+                            // 물량에 따른 소요시간 계산 (50만 이하: 30분, 초과: 60분)
+                            const duration = item.quantity <= 500000 ? 30 : 60;
+                            const bgColor = '#ffffff';
+                            const heightPx = duration === 30 ? '60px' : '120px';
+
+                            const channelName = item.channel === 'naver' ? '네이버앱' : (item.channel === 'payco' ? '페이앱' : '톡톡');
+                            const tooltipContent = `시간: ${item.time}\\n서비스: ${item.service}\\n캠페인: ${item.campaign_name || '-'}\\n물량: ${item.quantity.toLocaleString()}건\\n채널: ${channelName}\\n소요시간: ${duration}분`;
+
+                            html += `<div style="margin-bottom: 0.3rem; padding: 0.4rem 0.5rem; background: ${bgColor}; border-radius: 3px; font-size: 0.75rem; min-height: ${heightPx}; border-left: 4px solid ${borderColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer;" title="${tooltipContent}">`;
+                            html += `<div style="font-weight: 700; color: #2c3e50; margin-bottom: 0.2rem;">${item.time} <span style="font-size: 0.65rem; color: #7f8c8d; font-weight: 500;">${item.quantity.toLocaleString()}건</span></div>`;
+                            html += `<div style="font-size: 0.7rem; color: #34495e; line-height: 1.3; margin-bottom: 0.2rem; word-wrap: break-word;">${item.service}</div>`;
+                            if (item.campaign_name) {
+                                html += `<div style="font-size: 0.65rem; color: #7f8c8d; line-height: 1.2; word-wrap: break-word;">${item.campaign_name}</div>`;
+                            }
+                            html += `</div>`;
+                        });
+                    }
+
+                    html += '</td>';
+                });
+
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            calendarContainer.innerHTML = html;
+        }
+
+        function renderDailyView(calendarData) {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const day = currentDate.getDate();
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dayData = calendarData[dateStr] || [];
+            const totalQuantity = dayData.reduce((sum, item) => sum + item.quantity, 0);
+
+            let html = '<div style="background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
+
+            if (dayData.length === 0) {
+                html += '<p class="text-muted">이 날짜에 신청된 캠페인이 없습니다.</p>';
+            } else {
+                // 시간 순으로 정렬 (시간 없는 것은 맨 뒤로)
+                dayData.sort((a, b) => {
+                    const timeA = a.time || 'ZZZ';
+                    const timeB = b.time || 'ZZZ';
+                    return timeA.localeCompare(timeB);
+                });
+
+                html += '<table class="quota-table"><thead><tr>';
+                html += '<th>시간</th><th>서비스</th><th>채널</th><th>캠페인명</th><th>물량</th>';
+                html += '</tr></thead><tbody>';
+
+                dayData.forEach(item => {
+                    let timeDisplay = '-';
+                    if (item.time) {
+                        const [hour, minute] = item.time.split(':');
+                        const h = parseInt(hour);
+                        const ampm = h < 12 ? '오전' : '오후';
+                        const displayHour = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+                        timeDisplay = `${ampm} ${displayHour}:${minute}`;
+                    }
+
+                    html += '<tr>';
+                    html += `<td style="font-weight: 600;">${timeDisplay}</td>`;
+                    html += `<td>${item.service}</td>`;
+                    html += `<td>${getChannelBadge(item.channel)}</td>`;
+                    html += `<td>${item.campaign_name || '-'}</td>`;
+                    html += `<td class="quota-value">${item.quantity.toLocaleString()}건</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                html += `<div style="margin-top: 1.5rem; text-align: right; font-size: 1.2rem; font-weight: 600; color: #e74c3c;">`;
+                html += `일일 합계: ${totalQuantity.toLocaleString()}건`;
+                html += '</div>';
+            }
+
+            html += '</div>';
+            calendarContainer.innerHTML = html;
+        }
+
+        function getChannelName(channel) {
+            const channelNames = {
+                'naver': '네이버앱',
+                'payco': '페이앱',
+                'talktalk': '톡톡'
+            };
+            return channelNames[channel] || channel;
+        }
+
         function getChannelBadge(channel) {
             const channelNames = {
                 'naver': '네이버',
-                'payco': '페이코',
+                'payco': '페이앱',
                 'talktalk': '톡톡'
             };
             const channelClasses = {

@@ -1,10 +1,26 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sqlalchemy import func
+import os
+
+# 한국 시간 헬퍼 함수
+def kst_now():
+    return datetime.utcnow() + timedelta(hours=9)
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///noti_plan.db'
+
+# PostgreSQL (production) or SQLite (local development)
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    # Render PostgreSQL URL fix (postgres:// -> postgresql://)
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Local development
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///noti_plan.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'noti_plan_secret_key_2848'
 db = SQLAlchemy(app)
@@ -15,7 +31,7 @@ ADMIN_PASSWORD = '2848'
 class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=kst_now)
     services = db.relationship('Service', backref='organization', lazy=True)
     quotas = db.relationship('MonthlyQuota', backref='organization', lazy=True)
 
@@ -24,7 +40,7 @@ class Service(db.Model):
     name = db.Column(db.String(100), nullable=False)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
     manager_name = db.Column(db.String(100))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=kst_now)
     requests = db.relationship('SendRequest', backref='service', lazy=True)
 
 class MonthlyQuota(db.Model):
@@ -33,7 +49,7 @@ class MonthlyQuota(db.Model):
     year_month = db.Column(db.String(7), nullable=False)  # YYYY-MM
     channel = db.Column(db.String(20), nullable=False, default='naver')  # naver, payco, talktalk
     total_quota = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=kst_now)
 
     __table_args__ = (db.UniqueConstraint('organization_id', 'year_month', 'channel'),)
 
@@ -46,8 +62,8 @@ class SendRequest(db.Model):
     campaign_name = db.Column(db.String(200))
     quantity = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=kst_now)
+    updated_at = db.Column(db.DateTime, default=kst_now, onupdate=kst_now)
 
 # 관리자 로그인 페이지
 @app.route('/')
@@ -274,6 +290,57 @@ def add_organization():
 
     return jsonify({'success': True, 'message': '조직이 추가되었습니다.', 'id': org.id})
 
+# API: 조직 수정
+@app.route('/api/organization/<int:org_id>', methods=['PUT'])
+def update_organization(org_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    data = request.json
+    name = data.get('name')
+
+    if not name:
+        return jsonify({'success': False, 'message': '조직명을 입력하세요.'}), 400
+
+    org = Organization.query.get(org_id)
+    if not org:
+        return jsonify({'success': False, 'message': '조직을 찾을 수 없습니다.'}), 404
+
+    # 중복 체크 (자신 제외)
+    existing = Organization.query.filter(Organization.name == name, Organization.id != org_id).first()
+    if existing:
+        return jsonify({'success': False, 'message': '이미 존재하는 조직명입니다.'}), 400
+
+    org.name = name
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '조직이 수정되었습니다.'})
+
+# API: 조직 삭제
+@app.route('/api/organization/<int:org_id>', methods=['DELETE'])
+def delete_organization(org_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    org = Organization.query.get(org_id)
+    if not org:
+        return jsonify({'success': False, 'message': '조직을 찾을 수 없습니다.'}), 404
+
+    # 해당 조직의 서비스가 있는지 확인
+    services = Service.query.filter_by(organization_id=org_id).count()
+    if services > 0:
+        return jsonify({'success': False, 'message': f'이 조직에 {services}개의 서비스가 있습니다. 먼저 서비스를 삭제해주세요.'}), 400
+
+    # 물량 정보가 있는지 확인
+    quotas = MonthlyQuota.query.filter_by(organization_id=org_id).count()
+    if quotas > 0:
+        return jsonify({'success': False, 'message': f'이 조직에 {quotas}개의 물량 정보가 있습니다. 먼저 물량 정보를 삭제해주세요.'}), 400
+
+    db.session.delete(org)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '조직이 삭제되었습니다.'})
+
 # API: 서비스 추가
 @app.route('/api/service', methods=['POST'])
 def add_service():
@@ -293,6 +360,53 @@ def add_service():
     db.session.commit()
 
     return jsonify({'success': True, 'message': '서비스가 추가되었습니다.', 'id': service.id})
+
+# API: 서비스 수정
+@app.route('/api/service/<int:service_id>', methods=['PUT'])
+def update_service(service_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    data = request.json
+    name = data.get('name')
+    organization_id = data.get('organization_id')
+    manager_name = data.get('manager_name', '')
+
+    if not name:
+        return jsonify({'success': False, 'message': '서비스명을 입력하세요.'}), 400
+
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({'success': False, 'message': '서비스를 찾을 수 없습니다.'}), 404
+
+    service.name = name
+    # organization_id가 제공되면 업데이트, 없으면 기존 값 유지
+    if organization_id:
+        service.organization_id = organization_id
+    service.manager_name = manager_name
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '서비스가 수정되었습니다.'})
+
+# API: 서비스 삭제
+@app.route('/api/service/<int:service_id>', methods=['DELETE'])
+def delete_service(service_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({'success': False, 'message': '서비스를 찾을 수 없습니다.'}), 404
+
+    # 해당 서비스의 발송 요청이 있는지 확인
+    requests = SendRequest.query.filter_by(service_id=service_id).count()
+    if requests > 0:
+        return jsonify({'success': False, 'message': f'이 서비스에 {requests}개의 캠페인 신청이 있습니다. 먼저 캠페인을 삭제해주세요.'}), 400
+
+    db.session.delete(service)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '서비스가 삭제되었습니다.'})
 
 # API: 조직의 서비스 목록 조회
 @app.route('/api/services/<int:org_id>')
@@ -403,7 +517,9 @@ def get_calendar_data(org_id, year_month):
         SendRequest.send_date,
         Service.name,
         SendRequest.channel,
-        SendRequest.quantity
+        SendRequest.quantity,
+        SendRequest.send_time,
+        SendRequest.campaign_name
     ).join(Service).filter(
         Service.organization_id == org_id,
         SendRequest.send_date >= month_start,
@@ -423,7 +539,9 @@ def get_calendar_data(org_id, year_month):
         calendar_data[date_str].append({
             'service': req.name,
             'channel': req.channel,
-            'quantity': req.quantity
+            'quantity': req.quantity,
+            'time': req.send_time,
+            'campaign_name': req.campaign_name
         })
 
     # 채널별 물량 정보
@@ -475,7 +593,9 @@ def get_calendar_data_all(year_month):
         Service.name,
         Organization.name.label('org_name'),
         SendRequest.channel,
-        SendRequest.quantity
+        SendRequest.quantity,
+        SendRequest.send_time,
+        SendRequest.campaign_name
     ).join(Service, SendRequest.service_id == Service.id
     ).join(Organization, Service.organization_id == Organization.id
     ).filter(
@@ -496,7 +616,9 @@ def get_calendar_data_all(year_month):
         calendar_data[date_str].append({
             'service': f"{req.org_name} - {req.name}",
             'channel': req.channel,
-            'quantity': req.quantity
+            'quantity': req.quantity,
+            'time': req.send_time,
+            'campaign_name': req.campaign_name
         })
 
     # 전체 조직의 물량 정보
@@ -534,7 +656,10 @@ def get_calendar_data_by_service(service_id, year_month):
     requests = db.session.query(
         SendRequest.send_date,
         Service.name,
-        SendRequest.quantity
+        SendRequest.quantity,
+        SendRequest.channel,
+        SendRequest.send_time,
+        SendRequest.campaign_name
     ).join(Service).filter(
         SendRequest.service_id == service_id,
         SendRequest.send_date >= month_start,
@@ -548,7 +673,10 @@ def get_calendar_data_by_service(service_id, year_month):
             calendar_data[date_str] = []
         calendar_data[date_str].append({
             'service': req.name,
-            'quantity': req.quantity
+            'quantity': req.quantity,
+            'channel': req.channel,
+            'time': req.send_time,
+            'campaign_name': req.campaign_name
         })
 
     # 해당 서비스의 조직 물량 정보
@@ -586,6 +714,79 @@ def get_requests_by_service(service_id):
         'campaign_name': r.campaign_name or '-',
         'quantity': r.quantity,
         'created_at': r.created_at.strftime('%Y-%m-%d %H:%M')
+    } for r in requests])
+
+# API: 조직별 신청 목록 조회
+@app.route('/api/requests/org/<int:org_id>')
+def get_requests_by_org(org_id):
+    requests = db.session.query(
+        SendRequest.id,
+        SendRequest.send_date,
+        SendRequest.send_time,
+        SendRequest.channel,
+        SendRequest.campaign_name,
+        SendRequest.quantity,
+        SendRequest.created_at,
+        Service.name.label('service_name'),
+        Organization.name.label('org_name')
+    ).join(Service, SendRequest.service_id == Service.id
+    ).join(Organization, Service.organization_id == Organization.id
+    ).filter(Organization.id == org_id
+    ).order_by(SendRequest.send_date.desc(), SendRequest.created_at.desc()).all()
+
+    channel_names = {
+        'naver': '네이버앱',
+        'payco': '페이앱',
+        'talktalk': '톡톡'
+    }
+
+    return jsonify([{
+        'id': r.id,
+        'send_date': r.send_date.strftime('%Y-%m-%d'),
+        'send_time': r.send_time or '-',
+        'channel': r.channel,
+        'channel_name': channel_names.get(r.channel, r.channel),
+        'campaign_name': r.campaign_name or '-',
+        'quantity': r.quantity,
+        'created_at': r.created_at.strftime('%Y-%m-%d %H:%M'),
+        'service_name': r.service_name,
+        'org_name': r.org_name
+    } for r in requests])
+
+# API: 전체 신청 목록 조회
+@app.route('/api/requests/all')
+def get_all_requests():
+    requests = db.session.query(
+        SendRequest.id,
+        SendRequest.send_date,
+        SendRequest.send_time,
+        SendRequest.channel,
+        SendRequest.campaign_name,
+        SendRequest.quantity,
+        SendRequest.created_at,
+        Service.name.label('service_name'),
+        Organization.name.label('org_name')
+    ).join(Service, SendRequest.service_id == Service.id
+    ).join(Organization, Service.organization_id == Organization.id
+    ).order_by(SendRequest.send_date.desc(), SendRequest.created_at.desc()).all()
+
+    channel_names = {
+        'naver': '네이버앱',
+        'payco': '페이앱',
+        'talktalk': '톡톡'
+    }
+
+    return jsonify([{
+        'id': r.id,
+        'send_date': r.send_date.strftime('%Y-%m-%d'),
+        'send_time': r.send_time or '-',
+        'channel': r.channel,
+        'channel_name': channel_names.get(r.channel, r.channel),
+        'campaign_name': r.campaign_name or '-',
+        'quantity': r.quantity,
+        'created_at': r.created_at.strftime('%Y-%m-%d %H:%M'),
+        'service_name': r.service_name,
+        'org_name': r.org_name
     } for r in requests])
 
 # API: 신청 삭제

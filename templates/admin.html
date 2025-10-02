@@ -338,8 +338,13 @@
                     return;
                 }
 
-                let html = '<table class="quota-table"><thead><tr>';
-                html += '<th>조직</th><th>채널</th><th>연월</th><th>총 물량</th><th>등록일시</th><th>작업</th>';
+                let html = '<table class="quota-table sortable"><thead><tr>';
+                html += '<th class="sortable-header" data-sort-type="text">조직 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">채널 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">연월 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="number">총 물량 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">등록일시 <span class="sort-arrow"></span></th>';
+                html += '<th>작업</th>';
                 html += '</tr></thead><tbody>';
 
                 quotas.forEach(quota => {
@@ -358,6 +363,7 @@
 
                 html += '</tbody></table>';
                 allQuotaListContainer.innerHTML = html;
+                makeSortable();
             } catch (error) {
                 console.error('물량 목록 로드 실패:', error);
                 allQuotaListContainer.innerHTML = '<p class="text-muted">물량 목록을 불러오는데 실패했습니다.</p>';
@@ -614,19 +620,31 @@
                     return;
                 }
 
-                let html = '<table class="quota-table"><thead><tr>';
-                html += '<th>조직명</th><th>등록일시</th>';
+                let html = '<table class="quota-table sortable"><thead><tr>';
+                html += '<th class="sortable-header" data-sort-type="text">조직명 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">등록일시 <span class="sort-arrow"></span></th>';
+                html += '<th>관리</th>';
                 html += '</tr></thead><tbody>';
 
                 orgs.forEach(org => {
-                    html += '<tr>';
-                    html += `<td><strong>${org.name}</strong></td>`;
+                    html += `<tr id="org-row-${org.id}">`;
+                    html += `<td>`;
+                    html += `<span id="org-name-${org.id}" class="editable-text">${org.name}</span>`;
+                    html += `<input type="text" id="org-input-${org.id}" class="edit-input" value="${org.name}" style="display: none;">`;
+                    html += `</td>`;
                     html += `<td>${org.created_at}</td>`;
+                    html += `<td><div class="action-buttons">`;
+                    html += `<button class="btn-edit" id="org-edit-btn-${org.id}" onclick="startEditOrg(${org.id})">수정</button>`;
+                    html += `<button class="btn-delete" onclick="deleteOrg(${org.id}, '${org.name.replace(/'/g, "\\'")}')">삭제</button>`;
+                    html += `<button class="btn-primary" id="org-save-btn-${org.id}" onclick="saveOrg(${org.id})" style="display: none;">저장</button>`;
+                    html += `<button class="btn-secondary" id="org-cancel-btn-${org.id}" onclick="cancelEditOrg(${org.id}, '${org.name.replace(/'/g, "\\'")}')\" style="display: none;">취소</button>`;
+                    html += `</div></td>`;
                     html += '</tr>';
                 });
 
                 html += '</tbody></table>';
                 container.innerHTML = html;
+                makeSortable();
             } catch (error) {
                 console.error('조직 목록 로드 실패:', error);
             }
@@ -644,25 +662,225 @@
                     return;
                 }
 
-                let html = '<table class="quota-table"><thead><tr>';
-                html += '<th>조직</th><th>서비스명</th><th>담당자</th><th>등록일시</th>';
+                let html = '<table class="quota-table sortable"><thead><tr>';
+                html += '<th class="sortable-header" data-sort-type="text">조직 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">서비스명 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">담당자 <span class="sort-arrow"></span></th>';
+                html += '<th class="sortable-header" data-sort-type="text">등록일시 <span class="sort-arrow"></span></th>';
+                html += '<th>관리</th>';
                 html += '</tr></thead><tbody>';
 
                 services.forEach(service => {
-                    html += '<tr>';
+                    html += `<tr id="service-row-${service.id}" data-org-id="${service.organization_id}">`;
                     html += `<td><strong>${service.organization_name}</strong></td>`;
-                    html += `<td>${service.name}</td>`;
-                    html += `<td>${service.manager_name || '-'}</td>`;
+                    html += `<td>`;
+                    html += `<span id="service-name-${service.id}" class="editable-text">${service.name}</span>`;
+                    html += `<input type="text" id="service-name-input-${service.id}" class="edit-input" value="${service.name}" style="display: none;">`;
+                    html += `</td>`;
+                    html += `<td>`;
+                    html += `<span id="service-manager-${service.id}" class="editable-text">${service.manager_name || '-'}</span>`;
+                    html += `<input type="text" id="service-manager-input-${service.id}" class="edit-input" value="${service.manager_name || ''}" style="display: none;">`;
+                    html += `</td>`;
                     html += `<td>${service.created_at}</td>`;
+                    html += `<td><div class="action-buttons">`;
+                    html += `<button class="btn-edit" id="service-edit-btn-${service.id}" onclick="startEditService(${service.id})">수정</button>`;
+                    html += `<button class="btn-delete" onclick="deleteService(${service.id}, '${service.name.replace(/'/g, "\\'")}')">삭제</button>`;
+                    html += `<button class="btn-primary" id="service-save-btn-${service.id}" onclick="saveService(${service.id})" style="display: none;">저장</button>`;
+                    html += `<button class="btn-secondary" id="service-cancel-btn-${service.id}" onclick="cancelEditService(${service.id}, '${service.name.replace(/'/g, "\\'")}', '${(service.manager_name || '').replace(/'/g, "\\'")}')\" style="display: none;">취소</button>`;
+                    html += `</div></td>`;
                     html += '</tr>';
                 });
 
                 html += '</tbody></table>';
                 container.innerHTML = html;
+                makeSortable();
             } catch (error) {
                 console.error('서비스 목록 로드 실패:', error);
             }
         }
+
+        // 조직 수정 - 인라인 편집 시작
+        window.startEditOrg = function(orgId) {
+            document.getElementById(`org-name-${orgId}`).style.display = 'none';
+            document.getElementById(`org-input-${orgId}`).style.display = 'inline-block';
+            document.getElementById(`org-edit-btn-${orgId}`).style.display = 'none';
+            document.getElementById(`org-save-btn-${orgId}`).style.display = 'inline-block';
+            document.getElementById(`org-cancel-btn-${orgId}`).style.display = 'inline-block';
+            document.getElementById(`org-input-${orgId}`).focus();
+        };
+
+        // 조직 수정 취소
+        window.cancelEditOrg = function(orgId, originalName) {
+            document.getElementById(`org-input-${orgId}`).value = originalName;
+            document.getElementById(`org-name-${orgId}`).style.display = 'inline';
+            document.getElementById(`org-input-${orgId}`).style.display = 'none';
+            document.getElementById(`org-edit-btn-${orgId}`).style.display = 'inline-block';
+            document.getElementById(`org-save-btn-${orgId}`).style.display = 'none';
+            document.getElementById(`org-cancel-btn-${orgId}`).style.display = 'none';
+        };
+
+        // 조직 저장
+        window.saveOrg = async function(orgId) {
+            const newName = document.getElementById(`org-input-${orgId}`).value.trim();
+            if (!newName) {
+                alert('조직명을 입력하세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/organization/${orgId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: newName })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message + '\n\n페이지를 새로고침하여 모든 조직명을 업데이트합니다.');
+
+                    // 화면 전체 새로고침하여 모든 조직명 동기화
+                    location.reload();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('조직 수정 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 서비스 수정 - 인라인 편집 시작
+        window.startEditService = function(serviceId) {
+            document.getElementById(`service-name-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-name-input-${serviceId}`).style.display = 'inline-block';
+            document.getElementById(`service-manager-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-manager-input-${serviceId}`).style.display = 'inline-block';
+            document.getElementById(`service-edit-btn-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-save-btn-${serviceId}`).style.display = 'inline-block';
+            document.getElementById(`service-cancel-btn-${serviceId}`).style.display = 'inline-block';
+            document.getElementById(`service-name-input-${serviceId}`).focus();
+        };
+
+        // 서비스 수정 취소
+        window.cancelEditService = function(serviceId, originalName, originalManager) {
+            document.getElementById(`service-name-input-${serviceId}`).value = originalName;
+            document.getElementById(`service-manager-input-${serviceId}`).value = originalManager;
+            document.getElementById(`service-name-${serviceId}`).style.display = 'inline';
+            document.getElementById(`service-name-input-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-manager-${serviceId}`).style.display = 'inline';
+            document.getElementById(`service-manager-input-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-edit-btn-${serviceId}`).style.display = 'inline-block';
+            document.getElementById(`service-save-btn-${serviceId}`).style.display = 'none';
+            document.getElementById(`service-cancel-btn-${serviceId}`).style.display = 'none';
+        };
+
+        // 서비스 저장
+        window.saveService = async function(serviceId) {
+            const newName = document.getElementById(`service-name-input-${serviceId}`).value.trim();
+            const newManager = document.getElementById(`service-manager-input-${serviceId}`).value.trim();
+
+            if (!newName) {
+                alert('서비스명을 입력하세요.');
+                return;
+            }
+
+            // data-org-id 속성에서 organization_id 가져오기
+            const row = document.getElementById(`service-row-${serviceId}`);
+            const orgId = row.getAttribute('data-org-id');
+
+            console.log('Saving service:', {serviceId, newName, newManager, orgId}); // 디버그용
+
+            try {
+                const response = await fetch(`/api/service/${serviceId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: newName,
+                        organization_id: parseInt(orgId),
+                        manager_name: newManager
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+
+                    // 화면 업데이트 (새로고침 없이)
+                    document.getElementById(`service-name-${serviceId}`).textContent = newName;
+                    document.getElementById(`service-manager-${serviceId}`).textContent = newManager || '-';
+
+                    // 편집 모드 종료
+                    document.getElementById(`service-name-${serviceId}`).style.display = 'inline';
+                    document.getElementById(`service-name-input-${serviceId}`).style.display = 'none';
+                    document.getElementById(`service-manager-${serviceId}`).style.display = 'inline';
+                    document.getElementById(`service-manager-input-${serviceId}`).style.display = 'none';
+                    document.getElementById(`service-edit-btn-${serviceId}`).style.display = 'inline-block';
+                    document.getElementById(`service-save-btn-${serviceId}`).style.display = 'none';
+                    document.getElementById(`service-cancel-btn-${serviceId}`).style.display = 'none';
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('서비스 수정 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 조직 삭제
+        window.deleteOrg = async function(orgId, orgName) {
+            if (!confirm(`"${orgName}" 조직을 삭제하시겠습니까?\n\n⚠️ 이 조직에 서비스나 물량 정보가 있으면 삭제할 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/organization/${orgId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadOrgList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('조직 삭제 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 서비스 삭제
+        window.deleteService = async function(serviceId, serviceName) {
+            if (!confirm(`"${serviceName}" 서비스를 삭제하시겠습니까?\n\n⚠️ 이 서비스에 캠페인 신청이 있으면 삭제할 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/service/${serviceId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadServiceList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('서비스 삭제 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
 
         // 탭 전환 시 목록 로드
         tabBtns.forEach(btn => {
@@ -674,6 +892,67 @@
                 }
             });
         });
+
+        // 테이블 정렬 기능
+        function makeSortable() {
+            const tables = document.querySelectorAll('.sortable');
+            tables.forEach(table => {
+                const headers = table.querySelectorAll('.sortable-header');
+                headers.forEach((header, index) => {
+                    header.style.cursor = 'pointer';
+                    header.addEventListener('click', () => {
+                        sortTable(table, index, header.getAttribute('data-sort-type'));
+                    });
+                });
+            });
+        }
+
+        function sortTable(table, columnIndex, sortType) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const header = table.querySelectorAll('.sortable-header')[columnIndex];
+            const allHeaders = table.querySelectorAll('.sortable-header');
+
+            // 현재 정렬 방향 확인
+            const isAscending = header.classList.contains('sort-asc');
+
+            // 모든 헤더의 정렬 표시 제거
+            allHeaders.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+                const arrow = h.querySelector('.sort-arrow');
+                if (arrow) arrow.textContent = '';
+            });
+
+            // 새로운 정렬 방향 설정
+            const ascending = !isAscending;
+            header.classList.add(ascending ? 'sort-asc' : 'sort-desc');
+            const arrow = header.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = ascending ? ' ▲' : ' ▼';
+
+            // 행 정렬
+            rows.sort((a, b) => {
+                const aCell = a.cells[columnIndex];
+                const bCell = b.cells[columnIndex];
+
+                let aValue = aCell.textContent.trim();
+                let bValue = bCell.textContent.trim();
+
+                if (sortType === 'number') {
+                    // 숫자와 쉼표 제거
+                    aValue = parseInt(aValue.replace(/[^0-9]/g, '')) || 0;
+                    bValue = parseInt(bValue.replace(/[^0-9]/g, '')) || 0;
+                    return ascending ? aValue - bValue : bValue - aValue;
+                } else {
+                    // 텍스트 정렬
+                    return ascending
+                        ? aValue.localeCompare(bValue, 'ko')
+                        : bValue.localeCompare(aValue, 'ko');
+                }
+            });
+
+            // 정렬된 행을 다시 추가
+            rows.forEach(row => tbody.appendChild(row));
+        }
     </script>
 </body>
 </html>
