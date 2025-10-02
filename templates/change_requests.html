@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>변경 요청</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>광고성 알림 물량 관리</h1>
+            <ul class="nav-menu">
+                <li><a href="/admin">관리자</a></li>
+                <li><a href="/request">캠페인신청</a></li>
+                <li><a href="/change-requests" class="active">변경요청</a></li>
+                <li><a href="/calendar">현황보기</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="request-container">
+        <h2>변경 요청</h2>
+
+        <div class="info-box">
+            <h3>ℹ️ 변경 요청 안내</h3>
+            <ul>
+                <li>프리징된 월의 캠페인은 직접 수정/삭제가 불가능합니다.</li>
+                <li>변경이 필요한 경우 아래 양식을 통해 변경 요청을 제출해주세요.</li>
+                <li>관리자 승인 후 변경사항이 반영됩니다.</li>
+            </ul>
+        </div>
+
+        <!-- 2단 레이아웃 -->
+        <div class="two-column-layout">
+            <!-- 왼쪽: 변경 요청 폼 -->
+            <div class="request-form-section">
+                <div class="form-card">
+                    <h3>새 변경 요청</h3>
+                    <form id="changeRequestForm">
+                        <div class="form-group">
+                            <label for="requestType">요청 유형 *</label>
+                            <select id="requestType" required>
+                                <option value="">선택하세요</option>
+                                <option value="add">신규 캠페인 추가</option>
+                                <option value="modify">기존 캠페인 수정</option>
+                                <option value="delete">기존 캠페인 삭제</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="organization">조직 *</label>
+                            <select id="organization" required>
+                                <option value="">조직 선택</option>
+                                {% for org in organizations %}
+                                <option value="{{ org.id }}">{{ org.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="service">서비스 *</label>
+                            <select id="service" required disabled>
+                                <option value="">조직을 먼저 선택하세요</option>
+                            </select>
+                        </div>
+
+                        <!-- 수정/삭제 시에만 표시 -->
+                        <div class="form-group" id="originalRequestGroup" style="display: none;">
+                            <label for="originalRequest">기존 캠페인 *</label>
+                            <select id="originalRequest">
+                                <option value="">캠페인 선택</option>
+                            </select>
+                        </div>
+
+                        <!-- 추가/수정 시 표시 -->
+                        <div id="campaignDetailsSection" style="display: none;">
+                            <div class="form-group">
+                                <label for="channel">발송 채널 *</label>
+                                <select id="channel">
+                                    <option value="">채널 선택</option>
+                                    <option value="naver">네이버앱</option>
+                                    <option value="payco">페이앱</option>
+                                    <option value="talktalk">톡톡</option>
+                                </select>
+                            </div>
+
+                            <!-- 발송 날짜-시간 한 줄 -->
+                            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1.5rem;">
+                                <div>
+                                    <label for="sendDate" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">발송 날짜 *</label>
+                                    <input type="date" id="sendDate" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                </div>
+                                <div>
+                                    <label for="sendTime" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #34495e;">발송 시간 *</label>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap;">
+                                        <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
+                                            <input type="radio" name="ampm" value="AM" checked>
+                                            <span>오전</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;">
+                                            <input type="radio" name="ampm" value="PM">
+                                            <span>오후</span>
+                                        </label>
+                                        <select id="sendHour" required style="width: auto; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                            <option value="">시</option>
+                                            <option value="09">09</option>
+                                            <option value="10">10</option>
+                                            <option value="11">11</option>
+                                            <option value="12">12</option>
+                                            <option value="01">01</option>
+                                            <option value="02">02</option>
+                                            <option value="03">03</option>
+                                            <option value="04">04</option>
+                                            <option value="05">05</option>
+                                            <option value="06">06</option>
+                                            <option value="07">07</option>
+                                            <option value="08">08</option>
+                                        </select>
+                                        <span>시</span>
+                                        <select id="sendMinute" required style="width: auto; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                            <option value="">분</option>
+                                            <option value="00">00</option>
+                                            <option value="10">10</option>
+                                            <option value="20">20</option>
+                                            <option value="30">30</option>
+                                            <option value="40">40</option>
+                                            <option value="50">50</option>
+                                        </select>
+                                        <span>분</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="campaignName">캠페인명</label>
+                                <input type="text" id="campaignName" placeholder="캠페인명을 입력하세요">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="quantity">물량 *</label>
+                                <input type="text" id="quantity" placeholder="예: 10만 (100,000건)">
+                                <span class="help-text">숫자 + 단위로 입력 (예: 10만, 50만, 100만)</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="reason">변경 사유 *</label>
+                            <textarea id="reason" rows="4" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; font-family: inherit;" placeholder="변경이 필요한 이유를 상세히 입력해주세요" required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="requesterName">요청자명 *</label>
+                            <input type="text" id="requesterName" placeholder="이름을 입력하세요" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">변경 요청 제출</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 내 변경 요청 목록 -->
+            <div class="request-list-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">내 변경 요청 내역</h3>
+                </div>
+
+                <div class="form-card">
+                    <div class="filter-section">
+                        <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <label for="filterStatus">상태 필터</label>
+                                <select id="filterStatus">
+                                    <option value="">전체</option>
+                                    <option value="pending">대기중</option>
+                                    <option value="approved">승인</option>
+                                    <option value="rejected">거부</option>
+                                </select>
+                            </div>
+                            <button type="button" id="searchBtn" class="btn btn-primary">조회하기</button>
+                        </div>
+                    </div>
+                    <div id="myRequestsContainer" style="margin-top: 1rem;">
+                        <p class="text-muted">조회하기 버튼을 눌러주세요.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const requestTypeSelect = document.getElementById('requestType');
+        const orgSelect = document.getElementById('organization');
+        const serviceSelect = document.getElementById('service');
+        const originalRequestGroup = document.getElementById('originalRequestGroup');
+        const originalRequestSelect = document.getElementById('originalRequest');
+        const campaignDetailsSection = document.getElementById('campaignDetailsSection');
+        const sendDateInput = document.getElementById('sendDate');
+        const sendHourSelect = document.getElementById('sendHour');
+        const sendMinuteSelect = document.getElementById('sendMinute');
+        const channelSelect = document.getElementById('channel');
+        const campaignNameInput = document.getElementById('campaignName');
+        const quantityInput = document.getElementById('quantity');
+        const reasonInput = document.getElementById('reason');
+        const requesterNameInput = document.getElementById('requesterName');
+        const form = document.getElementById('changeRequestForm');
+        const filterStatus = document.getElementById('filterStatus');
+        const searchBtn = document.getElementById('searchBtn');
+        const myRequestsContainer = document.getElementById('myRequestsContainer');
+
+        // 요청 유형 변경
+        requestTypeSelect.addEventListener('change', () => {
+            const type = requestTypeSelect.value;
+
+            if (type === 'add') {
+                originalRequestGroup.style.display = 'none';
+                campaignDetailsSection.style.display = 'block';
+                setFieldsRequired(true);
+            } else if (type === 'modify') {
+                originalRequestGroup.style.display = 'block';
+                campaignDetailsSection.style.display = 'block';
+                setFieldsRequired(true);
+            } else if (type === 'delete') {
+                originalRequestGroup.style.display = 'block';
+                campaignDetailsSection.style.display = 'none';
+                setFieldsRequired(false);
+            } else {
+                originalRequestGroup.style.display = 'none';
+                campaignDetailsSection.style.display = 'none';
+                setFieldsRequired(false);
+            }
+        });
+
+        function setFieldsRequired(required) {
+            sendDateInput.required = required;
+            sendHourSelect.required = required;
+            sendMinuteSelect.required = required;
+            channelSelect.required = required;
+            quantityInput.required = required;
+        }
+
+        // 조직 변경 시 서비스 로드
+        orgSelect.addEventListener('change', async () => {
+            const orgId = orgSelect.value;
+            serviceSelect.innerHTML = '<option value="">서비스 선택</option>';
+            originalRequestSelect.innerHTML = '<option value="">캠페인 선택</option>';
+
+            if (!orgId) {
+                serviceSelect.disabled = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/services/${orgId}`);
+                const services = await response.json();
+
+                services.forEach(service => {
+                    const option = document.createElement('option');
+                    option.value = service.id;
+                    option.textContent = service.name;
+                    serviceSelect.appendChild(option);
+                });
+
+                serviceSelect.disabled = false;
+            } catch (error) {
+                alert('서비스 목록을 불러오는데 실패했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 서비스 변경 시 기존 캠페인 로드
+        serviceSelect.addEventListener('change', async () => {
+            const serviceId = serviceSelect.value;
+            originalRequestSelect.innerHTML = '<option value="">캠페인 선택</option>';
+
+            if (!serviceId || (requestTypeSelect.value !== 'modify' && requestTypeSelect.value !== 'delete')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/requests/service/${serviceId}`);
+                const requests = await response.json();
+
+                requests.forEach(req => {
+                    const option = document.createElement('option');
+                    option.value = req.id;
+                    const dateStr = new Date(req.send_date).toLocaleDateString('ko-KR');
+                    const channelName = req.channel === 'naver' ? '네이버앱' : (req.channel === 'payco' ? '페이앱' : '톡톡');
+                    option.textContent = `${dateStr} ${req.send_time} - ${channelName} - ${req.campaign_name || '(캠페인명 없음)'} - ${req.quantity.toLocaleString()}건`;
+                    option.dataset.sendDate = req.send_date;
+                    option.dataset.sendTime = req.send_time;
+                    option.dataset.channel = req.channel;
+                    option.dataset.campaignName = req.campaign_name || '';
+                    option.dataset.quantity = req.quantity;
+                    originalRequestSelect.appendChild(option);
+                });
+            } catch (error) {
+                alert('캠페인 목록을 불러오는데 실패했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 기존 캠페인 선택 시 수정용 필드에 자동 입력
+        originalRequestSelect.addEventListener('change', () => {
+            if (requestTypeSelect.value === 'modify') {
+                const selected = originalRequestSelect.selectedOptions[0];
+                if (selected && selected.value) {
+                    sendDateInput.value = selected.dataset.sendDate;
+
+                    // 시간 파싱 (HH:MM 형식)
+                    const time = selected.dataset.sendTime;
+                    if (time && time !== '-') {
+                        const [hours, minutes] = time.split(':');
+                        const hourNum = parseInt(hours);
+
+                        if (hourNum >= 12) {
+                            document.querySelector('input[name="ampm"][value="PM"]').checked = true;
+                            sendHourSelect.value = hourNum === 12 ? '12' : String(hourNum - 12).padStart(2, '0');
+                        } else {
+                            document.querySelector('input[name="ampm"][value="AM"]').checked = true;
+                            sendHourSelect.value = hourNum === 0 ? '12' : String(hourNum).padStart(2, '0');
+                        }
+                        sendMinuteSelect.value = minutes;
+                    }
+
+                    channelSelect.value = selected.dataset.channel;
+                    campaignNameInput.value = selected.dataset.campaignName;
+                    quantityInput.value = selected.dataset.quantity;
+                }
+            }
+        });
+
+        // 폼 제출
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const type = requestTypeSelect.value;
+            const serviceId = serviceSelect.value;
+
+            if (!serviceId) {
+                alert('서비스를 선택해주세요.');
+                return;
+            }
+
+            const data = {
+                request_type: type,
+                service_id: serviceId,
+                reason: reasonInput.value,
+                requester_name: requesterNameInput.value
+            };
+
+            if (type === 'modify' || type === 'delete') {
+                if (!originalRequestSelect.value) {
+                    alert('기존 캠페인을 선택해주세요.');
+                    return;
+                }
+                data.original_request_id = originalRequestSelect.value;
+            }
+
+            if (type === 'add' || type === 'modify') {
+                // 시간 변환 (오전/오후 -> 24시간 형식)
+                const ampm = document.querySelector('input[name="ampm"]:checked').value;
+                const hour = sendHourSelect.value;
+                const minute = sendMinuteSelect.value;
+
+                let hour24 = parseInt(hour);
+                if (ampm === 'PM' && hour24 !== 12) {
+                    hour24 += 12;
+                } else if (ampm === 'AM' && hour24 === 12) {
+                    hour24 = 0;
+                }
+
+                // 물량 변환 (10만 -> 100000)
+                let quantityValue = quantityInput.value.trim();
+                let quantityNumber = 0;
+
+                if (quantityValue.includes('만')) {
+                    const num = parseFloat(quantityValue.replace(/[^0-9.]/g, ''));
+                    quantityNumber = Math.round(num * 10000);
+                } else {
+                    quantityNumber = parseInt(quantityValue.replace(/[^0-9]/g, ''));
+                }
+
+                data.send_date = sendDateInput.value;
+                data.send_time = `${String(hour24).padStart(2, '0')}:${minute}`;
+                data.channel = channelSelect.value;
+                data.campaign_name = campaignNameInput.value;
+                data.quantity = quantityNumber;
+            }
+
+            try {
+                const response = await fetch('/api/change-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('변경 요청이 제출되었습니다.');
+                    form.reset();
+                    serviceSelect.disabled = true;
+                    originalRequestGroup.style.display = 'none';
+                    campaignDetailsSection.style.display = 'none';
+                    loadMyRequests();
+                } else {
+                    alert('요청 제출 실패: ' + (result.message || '알 수 없는 오류'));
+                }
+            } catch (error) {
+                alert('요청 제출 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 내 요청 조회
+        searchBtn.addEventListener('click', loadMyRequests);
+
+        async function loadMyRequests() {
+            const status = filterStatus.value;
+            let url = '/api/change-requests';
+            if (status) url += `?status=${status}`;
+
+            try {
+                const response = await fetch(url);
+                const requests = await response.json();
+
+                if (requests.length === 0) {
+                    myRequestsContainer.innerHTML = '<p class="text-muted">변경 요청 내역이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>요청일</th><th>유형</th><th>서비스</th><th>내용</th><th>요청자</th><th>상태</th><th>처리 메모</th>';
+                html += '</tr></thead><tbody>';
+
+                requests.forEach(req => {
+                    const typeText = req.request_type === 'add' ? '추가' : (req.request_type === 'modify' ? '수정' : '삭제');
+                    const statusText = req.status === 'pending' ? '대기중' : (req.status === 'approved' ? '승인' : '거부');
+                    const statusClass = req.status === 'pending' ? 'warning' : (req.status === 'approved' ? 'remaining' : 'exceeded');
+
+                    let content = '';
+                    if (req.request_type === 'add' || req.request_type === 'modify') {
+                        const dateStr = new Date(req.send_date).toLocaleDateString('ko-KR');
+                        const channelName = req.channel === 'naver' ? '네이버앱' : (req.channel === 'payco' ? '페이앱' : '톡톡');
+                        content = `${dateStr} ${req.send_time} ${channelName} ${req.quantity.toLocaleString()}건`;
+                        if (req.campaign_name) content += `<br/><small>${req.campaign_name}</small>`;
+                    } else {
+                        content = '캠페인 삭제 요청';
+                    }
+
+                    html += '<tr>';
+                    html += `<td>${new Date(req.created_at).toLocaleDateString('ko-KR')}</td>`;
+                    html += `<td><strong>${typeText}</strong></td>`;
+                    html += `<td>${req.service_name}</td>`;
+                    html += `<td>${content}<br/><small style="color: #7f8c8d;">사유: ${req.reason}</small></td>`;
+                    html += `<td>${req.requester_name}</td>`;
+                    html += `<td><span class="${statusClass}" style="font-weight: 600;">${statusText}</span></td>`;
+                    html += `<td>${req.admin_memo || '-'}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                myRequestsContainer.innerHTML = html;
+            } catch (error) {
+                alert('변경 요청 목록을 불러오는데 실패했습니다.');
+                console.error(error);
+            }
+        }
+
+        // 페이지 로드 시 자동 조회
+        loadMyRequests();
+    </script>
+</body>
+</html>

@@ -26,6 +26,8 @@
         <div class="admin-tabs">
             <button class="tab-btn active" data-tab="quota">물량 설정</button>
             <button class="tab-btn" data-tab="manage">조직/서비스 관리</button>
+            <button class="tab-btn" data-tab="freeze">프리징 관리</button>
+            <button class="tab-btn" data-tab="changes">변경 요청</button>
         </div>
 
         <!-- 물량 설정 탭 -->
@@ -116,6 +118,57 @@
                 <hr style="margin: 2rem 0; border: none; border-top: 2px solid #dee2e6;">
 
                 <div id="allQuotaListContainer">
+                    <p class="text-muted">로딩 중...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 프리징 관리 탭 -->
+        <div id="freezeTab" class="tab-content">
+            <h3>월별 프리징 관리</h3>
+            <div class="form-card">
+                <p class="help-text">프리징된 월은 일반 사용자가 캠페인을 직접 수정/삭제할 수 없으며, 변경 요청을 통해서만 수정이 가능합니다.</p>
+
+                <div class="form-group">
+                    <label for="freezeYearMonth">월 선택</label>
+                    <input type="month" id="freezeYearMonth" required>
+                </div>
+
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="button" id="freezeBtn" class="btn btn-primary">프리징 설정</button>
+                    <button type="button" id="unfreezeBtn" class="btn btn-secondary">프리징 해제</button>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 2rem;">프리징 현황</h3>
+            <div class="form-card">
+                <div id="freezeListContainer">
+                    <p class="text-muted">로딩 중...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 변경 요청 관리 탭 -->
+        <div id="changesTab" class="tab-content">
+            <h3>변경 요청 승인 관리</h3>
+
+            <div class="filter-section">
+                <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="filterChangeStatus">상태 필터</label>
+                        <select id="filterChangeStatus">
+                            <option value="">전체</option>
+                            <option value="pending">대기중</option>
+                            <option value="approved">승인</option>
+                            <option value="rejected">거부</option>
+                        </select>
+                    </div>
+                    <button type="button" id="searchChangeBtn" class="btn btn-primary">조회하기</button>
+                </div>
+            </div>
+
+            <div class="form-card" style="margin-top: 1rem;">
+                <div id="changeRequestsContainer">
                     <p class="text-muted">로딩 중...</p>
                 </div>
             </div>
@@ -889,9 +942,255 @@
                 if (tabName === 'manage') {
                     loadOrgList();
                     loadServiceList();
+                } else if (tabName === 'freeze') {
+                    loadFreezeList();
+                } else if (tabName === 'changes') {
+                    loadChangeRequests();
                 }
             });
         });
+
+        // 프리징 관리
+        const freezeYearMonthInput = document.getElementById('freezeYearMonth');
+        const freezeBtn = document.getElementById('freezeBtn');
+        const unfreezeBtn = document.getElementById('unfreezeBtn');
+        const freezeListContainer = document.getElementById('freezeListContainer');
+
+        // 기본값 설정 (다음 달)
+        const nextMonthForFreeze = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        freezeYearMonthInput.value = nextMonthForFreeze.toISOString().slice(0, 7);
+
+        // 프리징 설정
+        freezeBtn.addEventListener('click', async () => {
+            const yearMonth = freezeYearMonthInput.value;
+            if (!yearMonth) {
+                alert('월을 선택해주세요.');
+                return;
+            }
+
+            if (!confirm(`${yearMonth}을(를) 프리징하시겠습니까?\n\n프리징 후에는 일반 사용자가 캠페인을 직접 수정/삭제할 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/freeze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year_month: yearMonth, is_frozen: true })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadFreezeList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('프리징 설정 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 프리징 해제
+        unfreezeBtn.addEventListener('click', async () => {
+            const yearMonth = freezeYearMonthInput.value;
+            if (!yearMonth) {
+                alert('월을 선택해주세요.');
+                return;
+            }
+
+            if (!confirm(`${yearMonth}의 프리징을 해제하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/freeze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year_month: yearMonth, is_frozen: false })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadFreezeList();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('프리징 해제 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+
+        // 프리징 목록 로드
+        async function loadFreezeList() {
+            try {
+                const response = await fetch('/api/freezes');
+                const freezes = await response.json();
+
+                if (freezes.length === 0) {
+                    freezeListContainer.innerHTML = '<p class="text-muted">설정된 프리징이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>연월</th><th>상태</th><th>프리징 일시</th><th>처리자</th>';
+                html += '</tr></thead><tbody>';
+
+                freezes.forEach(freeze => {
+                    html += '<tr>';
+                    html += `<td><strong>${freeze.year_month}</strong></td>`;
+                    html += `<td>`;
+                    if (freeze.is_frozen) {
+                        html += '<span style="color: #e74c3c; font-weight: bold;">🔒 프리징</span>';
+                    } else {
+                        html += '<span style="color: #27ae60;">🔓 해제</span>';
+                    }
+                    html += `</td>`;
+                    html += `<td>${freeze.frozen_at || '-'}</td>`;
+                    html += `<td>${freeze.frozen_by || '-'}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                freezeListContainer.innerHTML = html;
+            } catch (error) {
+                console.error('프리징 목록 로드 실패:', error);
+                freezeListContainer.innerHTML = '<p class="text-muted">프리징 목록을 불러오는데 실패했습니다.</p>';
+            }
+        }
+
+        // 변경 요청 관리
+        const filterChangeStatus = document.getElementById('filterChangeStatus');
+        const searchChangeBtn = document.getElementById('searchChangeBtn');
+        const changeRequestsContainer = document.getElementById('changeRequestsContainer');
+
+        searchChangeBtn.addEventListener('click', loadChangeRequests);
+
+        async function loadChangeRequests() {
+            const status = filterChangeStatus.value;
+
+            try {
+                let url = '/api/change-requests';
+                if (status) url += `?status=${status}`;
+
+                const response = await fetch(url);
+                const requests = await response.json();
+
+                if (requests.length === 0) {
+                    changeRequestsContainer.innerHTML = '<p class="text-muted">변경 요청이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="quota-table"><thead><tr>';
+                html += '<th>연월</th><th>유형</th><th>조직</th><th>서비스</th><th>요청 내용</th><th>요청자</th><th>상태</th><th>요청일시</th><th>작업</th>';
+                html += '</tr></thead><tbody>';
+
+                requests.forEach(req => {
+                    html += '<tr>';
+                    html += `<td>${req.year_month}</td>`;
+                    html += `<td><strong>${req.request_type_name}</strong></td>`;
+                    html += `<td>${req.org_name}</td>`;
+                    html += `<td>${req.service_name}</td>`;
+
+                    // 요청 내용 요약
+                    let content = '';
+                    if (req.send_date) content += `날짜: ${req.send_date}<br>`;
+                    if (req.send_time) content += `시간: ${req.send_time}<br>`;
+                    if (req.channel_name) content += `채널: ${req.channel_name}<br>`;
+                    if (req.campaign_name && req.campaign_name !== '-') content += `캠페인: ${req.campaign_name}<br>`;
+                    if (req.quantity) content += `물량: ${req.quantity.toLocaleString()}건<br>`;
+                    content += `사유: ${req.reason}`;
+                    html += `<td style="font-size: 0.85rem;">${content}</td>`;
+
+                    html += `<td>${req.requester_name}</td>`;
+
+                    let statusColor = req.status === 'pending' ? '#f39c12' : (req.status === 'approved' ? '#27ae60' : '#e74c3c');
+                    html += `<td><span style="color: ${statusColor}; font-weight: bold;">${req.status_name}</span></td>`;
+                    html += `<td>${req.created_at}</td>`;
+
+                    html += `<td class="action-buttons">`;
+                    if (req.status === 'pending') {
+                        html += `<button class="btn-edit" onclick="approveChange(${req.id})">승인</button>`;
+                        html += `<button class="btn-delete" onclick="rejectChange(${req.id})">거부</button>`;
+                    } else {
+                        html += `<button class="btn-secondary" onclick="viewChangeDetail(${req.id}, '${req.status_name}', '${req.admin_memo || ''}', '${req.processed_by || ''}', '${req.processed_at || ''}')">상세</button>`;
+                    }
+                    html += `</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                changeRequestsContainer.innerHTML = html;
+            } catch (error) {
+                console.error('변경 요청 로드 실패:', error);
+                changeRequestsContainer.innerHTML = '<p class="text-muted">변경 요청을 불러오는데 실패했습니다.</p>';
+            }
+        }
+
+        // 변경 요청 승인
+        window.approveChange = async function(requestId) {
+            const memo = prompt('승인 메모 (선택사항):');
+            if (memo === null) return; // 취소
+
+            try {
+                const response = await fetch(`/api/change-request/${requestId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'approve', admin_memo: memo })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadChangeRequests();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('승인 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 변경 요청 거부
+        window.rejectChange = async function(requestId) {
+            const memo = prompt('거부 사유를 입력해주세요:');
+            if (!memo) {
+                alert('거부 사유를 입력해주세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/change-request/${requestId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reject', admin_memo: memo })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadChangeRequests();
+                } else {
+                    alert('오류: ' + result.message);
+                }
+            } catch (error) {
+                alert('거부 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        };
+
+        // 변경 요청 상세 보기
+        window.viewChangeDetail = function(requestId, status, memo, processedBy, processedAt) {
+            let message = `상태: ${status}\n`;
+            if (memo) message += `관리자 메모: ${memo}\n`;
+            if (processedBy) message += `처리자: ${processedBy}\n`;
+            if (processedAt) message += `처리일시: ${processedAt}\n`;
+            alert(message);
+        };
 
         // 테이블 정렬 기능
         function makeSortable() {

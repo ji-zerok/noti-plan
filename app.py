@@ -65,6 +65,48 @@ class SendRequest(db.Model):
     created_at = db.Column(db.DateTime, default=kst_now)
     updated_at = db.Column(db.DateTime, default=kst_now, onupdate=kst_now)
 
+# 프리징 관리
+class MonthlyFreeze(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    year_month = db.Column(db.String(7), nullable=False, unique=True)  # YYYY-MM
+    is_frozen = db.Column(db.Boolean, default=False)
+    frozen_at = db.Column(db.DateTime)
+    frozen_by = db.Column(db.String(100))  # 관리자
+    created_at = db.Column(db.DateTime, default=kst_now)
+
+# 변경 요청
+class ChangeRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    year_month = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    request_type = db.Column(db.String(20), nullable=False)  # add, modify, delete
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=False)
+
+    # 기존 캠페인 (수정/삭제인 경우)
+    original_request_id = db.Column(db.Integer, db.ForeignKey('send_request.id'))
+
+    # 변경 내용
+    send_date = db.Column(db.Date)
+    send_time = db.Column(db.String(5))
+    channel = db.Column(db.String(20))
+    campaign_name = db.Column(db.String(200))
+    quantity = db.Column(db.Integer)
+
+    # 요청 정보
+    reason = db.Column(db.Text, nullable=False)  # 변경 사유
+    requester_name = db.Column(db.String(100), nullable=False)  # 요청자
+
+    # 처리 정보
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    admin_memo = db.Column(db.Text)  # 관리자 메모
+    processed_by = db.Column(db.String(100))  # 처리자
+    processed_at = db.Column(db.DateTime)
+
+    created_at = db.Column(db.DateTime, default=kst_now)
+
+    # Relationships
+    service = db.relationship('Service', backref='change_requests')
+    original_request = db.relationship('SendRequest', backref='change_requests', foreign_keys=[original_request_id])
+
 # 관리자 로그인 페이지
 @app.route('/')
 @app.route('/admin/login')
@@ -108,6 +150,12 @@ def request_page():
 def calendar_page():
     organizations = Organization.query.all()
     return render_template('calendar.html', organizations=organizations)
+
+# 변경 요청 화면
+@app.route('/change-requests')
+def change_requests_page():
+    organizations = Organization.query.all()
+    return render_template('change_requests.html', organizations=organizations)
 
 # API: 조직별 월간 물량 설정
 @app.route('/api/quota', methods=['POST'])
@@ -453,6 +501,11 @@ def create_request():
     service = Service.query.get(service_id)
     year_month = send_date.strftime('%Y-%m')
 
+    # 프리징 체크
+    freeze = MonthlyFreeze.query.filter_by(year_month=year_month).first()
+    if freeze and freeze.is_frozen:
+        return jsonify({'success': False, 'message': f'{year_month}은(는) 프리징되었습니다. 변경 요청을 이용해주세요.'}), 403
+
     quota = MonthlyQuota.query.filter_by(
         organization_id=service.organization_id,
         year_month=year_month,
@@ -695,9 +748,45 @@ def get_calendar_data_by_service(service_id, year_month):
     })
 
 # API: 서비스별 신청 목록 조회
-@app.route('/api/requests/<int:service_id>')
+@app.route('/api/requests/service/<int:service_id>')
 def get_requests_by_service(service_id):
-    requests = SendRequest.query.filter_by(service_id=service_id).order_by(SendRequest.send_date.desc(), SendRequest.created_at.desc()).all()
+    from datetime import datetime, time as dt_time
+
+    # 오늘 날짜 (KST)
+    kst_now = datetime.now(KST)
+    today = kst_now.date()
+    current_time = kst_now.time()
+
+    # 오늘 이후의 캠페인만 조회
+    requests = SendRequest.query.filter_by(service_id=service_id).filter(
+        SendRequest.send_date >= today
+    ).order_by(
+        SendRequest.send_date.asc(),
+        SendRequest.send_time.asc(),
+        SendRequest.created_at.desc()
+    ).all()
+
+    # 오늘 날짜인 경우 현재 시간 이후만 필터링
+    filtered_requests = []
+    for r in requests:
+        if r.send_date == today:
+            # 오늘 날짜인 경우 시간 체크
+            if r.send_time:
+                # send_time이 문자열 형태 (HH:MM)
+                try:
+                    hour, minute = map(int, r.send_time.split(':'))
+                    send_time_obj = dt_time(hour, minute)
+                    if send_time_obj >= current_time:
+                        filtered_requests.append(r)
+                except:
+                    # 파싱 실패 시 포함
+                    filtered_requests.append(r)
+            else:
+                # 시간 미정인 경우 포함
+                filtered_requests.append(r)
+        else:
+            # 미래 날짜는 모두 포함
+            filtered_requests.append(r)
 
     channel_names = {
         'naver': '네이버앱',
@@ -714,7 +803,7 @@ def get_requests_by_service(service_id):
         'campaign_name': r.campaign_name or '-',
         'quantity': r.quantity,
         'created_at': r.created_at.strftime('%Y-%m-%d %H:%M')
-    } for r in requests])
+    } for r in filtered_requests])
 
 # API: 조직별 신청 목록 조회
 @app.route('/api/requests/org/<int:org_id>')
@@ -796,10 +885,233 @@ def delete_request(request_id):
     if not req:
         return jsonify({'success': False, 'message': '해당 신청을 찾을 수 없습니다.'}), 404
 
+    # 프리징 체크
+    year_month = req.send_date.strftime('%Y-%m')
+    freeze = MonthlyFreeze.query.filter_by(year_month=year_month).first()
+    if freeze and freeze.is_frozen:
+        return jsonify({'success': False, 'message': f'{year_month}은(는) 프리징되었습니다. 변경 요청을 이용해주세요.'}), 403
+
     db.session.delete(req)
     db.session.commit()
 
     return jsonify({'success': True, 'message': '신청이 삭제되었습니다.'})
+
+# API: 프리징 상태 조회
+@app.route('/api/freeze/<year_month>')
+def get_freeze_status(year_month):
+    freeze = MonthlyFreeze.query.filter_by(year_month=year_month).first()
+    if freeze:
+        return jsonify({
+            'is_frozen': freeze.is_frozen,
+            'frozen_at': freeze.frozen_at.strftime('%Y-%m-%d %H:%M') if freeze.frozen_at else None,
+            'frozen_by': freeze.frozen_by
+        })
+    return jsonify({'is_frozen': False})
+
+# API: 프리징 설정 (관리자)
+@app.route('/api/freeze', methods=['POST'])
+def set_freeze():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    data = request.json
+    year_month = data.get('year_month')
+    is_frozen = data.get('is_frozen')
+
+    freeze = MonthlyFreeze.query.filter_by(year_month=year_month).first()
+
+    if freeze:
+        freeze.is_frozen = is_frozen
+        if is_frozen:
+            freeze.frozen_at = kst_now()
+            freeze.frozen_by = '관리자'
+    else:
+        freeze = MonthlyFreeze(
+            year_month=year_month,
+            is_frozen=is_frozen,
+            frozen_at=kst_now() if is_frozen else None,
+            frozen_by='관리자' if is_frozen else None
+        )
+        db.session.add(freeze)
+
+    db.session.commit()
+
+    status_text = '프리징' if is_frozen else '프리징 해제'
+    return jsonify({'success': True, 'message': f'{year_month}이(가) {status_text}되었습니다.'})
+
+# API: 모든 프리징 목록 조회
+@app.route('/api/freezes')
+def get_all_freezes():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    freezes = MonthlyFreeze.query.order_by(MonthlyFreeze.year_month.desc()).all()
+    return jsonify([{
+        'year_month': f.year_month,
+        'is_frozen': f.is_frozen,
+        'frozen_at': f.frozen_at.strftime('%Y-%m-%d %H:%M') if f.frozen_at else None,
+        'frozen_by': f.frozen_by
+    } for f in freezes])
+
+# API: 변경 요청 생성
+@app.route('/api/change-request', methods=['POST'])
+def create_change_request():
+    data = request.json
+
+    # send_date로부터 year_month 추출
+    year_month = None
+    if data.get('send_date'):
+        send_date = datetime.strptime(data.get('send_date'), '%Y-%m-%d').date()
+        year_month = f"{send_date.year}-{str(send_date.month).zfill(2)}"
+    elif data.get('request_type') == 'delete' and data.get('original_request_id'):
+        # 삭제 요청인 경우 원본 요청의 날짜에서 추출
+        original = SendRequest.query.get(data.get('original_request_id'))
+        if original:
+            year_month = f"{original.send_date.year}-{str(original.send_date.month).zfill(2)}"
+
+    change_req = ChangeRequest(
+        year_month=year_month,
+        request_type=data.get('request_type'),
+        service_id=data.get('service_id'),
+        original_request_id=data.get('original_request_id'),
+        send_date=datetime.strptime(data.get('send_date'), '%Y-%m-%d').date() if data.get('send_date') else None,
+        send_time=data.get('send_time'),
+        channel=data.get('channel'),
+        campaign_name=data.get('campaign_name'),
+        quantity=data.get('quantity'),
+        reason=data.get('reason'),
+        requester_name=data.get('requester_name')
+    )
+
+    db.session.add(change_req)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '변경 요청이 등록되었습니다.'})
+
+# API: 변경 요청 목록 조회
+@app.route('/api/change-requests')
+def get_change_requests():
+    status_filter = request.args.get('status')
+
+    query = db.session.query(
+        ChangeRequest,
+        Service.name.label('service_name'),
+        Organization.name.label('org_name')
+    ).join(Service, ChangeRequest.service_id == Service.id
+    ).join(Organization, Service.organization_id == Organization.id)
+
+    if status_filter:
+        query = query.filter(ChangeRequest.status == status_filter)
+
+    change_requests = query.order_by(ChangeRequest.created_at.desc()).all()
+
+    request_type_names = {
+        'add': '신규 추가',
+        'modify': '수정',
+        'delete': '삭제'
+    }
+
+    status_names = {
+        'pending': '대기중',
+        'approved': '승인',
+        'rejected': '거부'
+    }
+
+    channel_names = {
+        'naver': '네이버앱',
+        'payco': '페이앱',
+        'talktalk': '톡톡'
+    }
+
+    return jsonify([{
+        'id': cr.id,
+        'year_month': cr.year_month,
+        'request_type': cr.request_type,
+        'request_type_name': request_type_names.get(cr.request_type, cr.request_type),
+        'org_name': org_name,
+        'service_name': service_name,
+        'send_date': cr.send_date.strftime('%Y-%m-%d') if cr.send_date else None,
+        'send_time': cr.send_time or '-',
+        'channel': cr.channel,
+        'channel_name': channel_names.get(cr.channel, cr.channel) if cr.channel else '-',
+        'campaign_name': cr.campaign_name or '-',
+        'quantity': cr.quantity,
+        'reason': cr.reason,
+        'requester_name': cr.requester_name,
+        'status': cr.status,
+        'status_name': status_names.get(cr.status, cr.status),
+        'admin_memo': cr.admin_memo,
+        'processed_by': cr.processed_by,
+        'processed_at': cr.processed_at.strftime('%Y-%m-%d %H:%M') if cr.processed_at else None,
+        'created_at': cr.created_at.strftime('%Y-%m-%d %H:%M')
+    } for cr, service_name, org_name in change_requests])
+
+# API: 변경 요청 처리 (승인/거부)
+@app.route('/api/change-request/<int:request_id>', methods=['PUT'])
+def process_change_request(request_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    data = request.json
+    change_req = ChangeRequest.query.get(request_id)
+
+    if not change_req:
+        return jsonify({'success': False, 'message': '변경 요청을 찾을 수 없습니다.'}), 404
+
+    action = data.get('action')  # approve, reject
+    admin_memo = data.get('admin_memo', '')
+
+    if action == 'approve':
+        # 변경 요청 승인 처리
+        if change_req.request_type == 'add':
+            # 신규 캠페인 추가
+            new_request = SendRequest(
+                service_id=change_req.service_id,
+                send_date=change_req.send_date,
+                send_time=change_req.send_time,
+                channel=change_req.channel,
+                campaign_name=change_req.campaign_name,
+                quantity=change_req.quantity
+            )
+            db.session.add(new_request)
+        elif change_req.request_type == 'modify':
+            # 기존 캠페인 수정
+            original = SendRequest.query.get(change_req.original_request_id)
+            if original:
+                if change_req.send_date:
+                    original.send_date = change_req.send_date
+                if change_req.send_time:
+                    original.send_time = change_req.send_time
+                if change_req.channel:
+                    original.channel = change_req.channel
+                if change_req.campaign_name:
+                    original.campaign_name = change_req.campaign_name
+                if change_req.quantity:
+                    original.quantity = change_req.quantity
+        elif change_req.request_type == 'delete':
+            # 기존 캠페인 삭제
+            original = SendRequest.query.get(change_req.original_request_id)
+            if original:
+                db.session.delete(original)
+
+        change_req.status = 'approved'
+        change_req.admin_memo = admin_memo
+        change_req.processed_by = '관리자'
+        change_req.processed_at = kst_now()
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': '변경 요청이 승인되었습니다.'})
+
+    elif action == 'reject':
+        change_req.status = 'rejected'
+        change_req.admin_memo = admin_memo
+        change_req.processed_by = '관리자'
+        change_req.processed_at = kst_now()
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': '변경 요청이 거부되었습니다.'})
+
+    return jsonify({'success': False, 'message': '잘못된 요청입니다.'}), 400
 
 # 초기 데이터 생성
 @app.route('/init')
