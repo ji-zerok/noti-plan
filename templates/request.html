@@ -14,6 +14,7 @@
             <ul class="nav-menu">
                 <li><a href="/admin">관리자</a></li>
                 <li><a href="/request" class="active">캠페인신청</a></li>
+                <li><a href="/change-requests">변경요청</a></li>
                 <li><a href="/calendar">현황보기</a></li>
             </ul>
         </div>
@@ -31,6 +32,11 @@
                 <li><strong>물량 입력 범위: 최소 100건 ~ 최대 1,000만건</strong></li>
                 <li>입력 예시: <code>1천</code>, <code>5만</code>, <code>12만</code>, <code>35만</code></li>
             </ul>
+        </div>
+
+        <div id="freezeWarning" class="info-box" style="display: none; background: #fff3cd; border-color: #ffc107;">
+            <h3>🔒 프리징 알림</h3>
+            <p id="freezeWarningMessage"></p>
         </div>
 
         <div class="two-column-layout">
@@ -200,6 +206,9 @@
         const sendDateInput = document.getElementById('sendDate');
         const sendHourInput = document.getElementById('sendHour');
         const sendMinuteInput = document.getElementById('sendMinute');
+        const freezeWarning = document.getElementById('freezeWarning');
+        const freezeWarningMessage = document.getElementById('freezeWarningMessage');
+        let currentFreezeStatus = null;
         const campaignNameInput = document.getElementById('campaignName');
         const form = document.getElementById('requestForm');
         const quotaInfo = document.getElementById('quotaInfo');
@@ -344,13 +353,53 @@
             }
         }
 
-        sendDateInput.addEventListener('change', loadQuotaInfo);
+        // 프리징 상태 체크
+        async function checkFreezeStatus() {
+            if (!sendDateInput.value) return;
+
+            const date = new Date(sendDateInput.value);
+            const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+            try {
+                const response = await fetch(`/api/freeze/${yearMonth}`);
+                const freeze = await response.json();
+
+                currentFreezeStatus = freeze;
+
+                if (freeze.is_frozen) {
+                    freezeWarning.style.display = 'block';
+                    freezeWarningMessage.innerHTML = `
+                        <strong>${yearMonth}</strong>은(는) 프리징되었습니다.<br>
+                        직접 수정/삭제가 불가능하며, <strong>변경 요청</strong>을 통해서만 수정할 수 있습니다.<br>
+                        프리징 일시: ${freeze.frozen_at || '알 수 없음'} | 처리자: ${freeze.frozen_by || '알 수 없음'}
+                    `;
+                } else {
+                    freezeWarning.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('프리징 상태 확인 실패:', error);
+            }
+        }
+
+        sendDateInput.addEventListener('change', () => {
+            checkFreezeStatus();
+            loadQuotaInfo();
+        });
         orgSelect.addEventListener('change', loadQuotaInfo);
         channelSelect.addEventListener('change', loadQuotaInfo);
 
         // 폼 제출
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // 프리징 체크
+            if (currentFreezeStatus && currentFreezeStatus.is_frozen) {
+                const goToChangeRequest = confirm('선택한 날짜는 프리징되어 직접 신청할 수 없습니다.\n\n변경 요청 페이지로 이동하시겠습니까?');
+                if (goToChangeRequest) {
+                    window.location.href = '/change-requests';
+                }
+                return;
+            }
 
             const quantity = parseInt(quantityHiddenInput.value);
 
@@ -627,7 +676,7 @@
         };
 
         // Excel 다운로드 기능
-        downloadExcelBtn.addEventListener('click', () => {
+        downloadExcelBtn.addEventListener('click', async () => {
             if (currentRequests.length === 0) {
                 alert('다운로드할 데이터가 없습니다.');
                 return;
@@ -705,6 +754,59 @@
             // 워크북 생성
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, '캠페인목록');
+
+            // 변경 요청 이력 가져오기
+            try {
+                const changeResponse = await fetch('/api/change-requests');
+                const changeRequests = await changeResponse.json();
+
+                if (changeRequests.length > 0) {
+                    // 변경 요청 데이터 준비
+                    const changeData = changeRequests.map(req => ({
+                        '요청일시': req.created_at,
+                        '유형': req.request_type_name,
+                        '조직': req.org_name,
+                        '서비스': req.service_name,
+                        '발송일자': req.send_date || '-',
+                        '발송시간': req.send_time || '-',
+                        '채널': req.channel_name || '-',
+                        '캠페인명': req.campaign_name || '-',
+                        '물량': req.quantity || '-',
+                        '변경사유': req.reason,
+                        '요청자': req.requester_name,
+                        '상태': req.status_name,
+                        '처리일시': req.processed_at || '-',
+                        '처리자': req.processed_by || '-',
+                        '관리자메모': req.admin_memo || '-'
+                    }));
+
+                    // 변경 요청 워크시트 생성
+                    const wsChange = XLSX.utils.json_to_sheet(changeData);
+
+                    // 열 너비 설정
+                    wsChange['!cols'] = [
+                        { wch: 18 }, // 요청일시
+                        { wch: 10 }, // 유형
+                        { wch: 15 }, // 조직
+                        { wch: 20 }, // 서비스
+                        { wch: 12 }, // 발송일자
+                        { wch: 10 }, // 발송시간
+                        { wch: 10 }, // 채널
+                        { wch: 30 }, // 캠페인명
+                        { wch: 12 }, // 물량
+                        { wch: 40 }, // 변경사유
+                        { wch: 12 }, // 요청자
+                        { wch: 10 }, // 상태
+                        { wch: 18 }, // 처리일시
+                        { wch: 12 }, // 처리자
+                        { wch: 30 }  // 관리자메모
+                    ];
+
+                    XLSX.utils.book_append_sheet(wb, wsChange, '변경요청이력');
+                }
+            } catch (error) {
+                console.error('변경 요청 이력을 불러오는데 실패했습니다:', error);
+            }
 
             // 파일명 생성 (조회명_날짜)
             const today = new Date();
